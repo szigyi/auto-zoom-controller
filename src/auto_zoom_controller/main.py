@@ -7,7 +7,7 @@ import time
 
 
 def __turn(motor, turns):
-    motor.SetMicroStep(Stepper.softward, Stepper.fullstep)
+    motor.SetMicroStep(Stepper.softward, Stepper.step_1_32)
     motor.TurnStep(Dir=Direction.forward, steps=turns, stepdelay=0.001)
     motor.Stop()
 
