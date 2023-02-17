@@ -34,7 +34,7 @@ def run(interval_in_seconds, length_in_minutes):
 
         schedule.every(interval_in_seconds).seconds.do(job)
 
-        while number_of_total_activations <= activated:
+        while activated <= number_of_total_activations:
             schedule.run_pending()
             time.sleep(1)
     except Exception as e:
