@@ -2,7 +2,7 @@
 Use a stepper motor to zoom a lens during timelapse
 
 ```bash
-python3 auto-zoom-controller
+python3 auto_zoom_controller
 ```
 
 ## Install dependencies
