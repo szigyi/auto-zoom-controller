@@ -30,6 +30,7 @@ def run(interval_in_seconds, length_in_minutes):
             nonlocal activated
             __turn(motor, turns)
             activated += 1
+            print("Activated:", activated)
 
         schedule.every(interval_in_seconds).seconds.do(job)
 
@@ -47,5 +48,5 @@ def run(interval_in_seconds, length_in_minutes):
 
 if __name__ == '__main__':
     interval_in_seconds = 5
-    length_in_minutes = 10
+    length_in_minutes = 5
     run(interval_in_seconds, length_in_minutes)
