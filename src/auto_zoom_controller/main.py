@@ -5,11 +5,7 @@ from DRV8825_Helper import Stepper, Direction
 import schedule
 import time
 
-
-def __turn(motor, turns):
-    motor.SetMicroStep(Stepper.softward, Stepper.step_1_32)
-    motor.TurnStep(Dir=Direction.forward, steps=turns, stepdelay=0.001)
-    motor.Stop()
+from auto_zoom_controller.AutoZoom import AutoZoom
 
 
 def run(interval_in_seconds, length_in_minutes):
@@ -23,25 +19,30 @@ def run(interval_in_seconds, length_in_minutes):
     print("Turns: ", turns)
 
     try:
-        motor = DRV8825(dir_pin=13, step_pin=19, enable_pin=12, mode_pins=(16, 17, 20))
+        auto_zoom = AutoZoom(turns)
         GPIO.output(12, 0)  # set to low as documentation requires it
 
-        def job():
-            nonlocal activated
-            __turn(motor, turns)
-            activated += 1
-            print("Activated:", activated)
-
-        schedule.every(interval_in_seconds).seconds.do(job)
+        schedule.every(interval_in_seconds).seconds.do(auto_zoom.job)
 
         while activated <= number_of_total_activations:
             schedule.run_pending()
             time.sleep(1)
+
+        schedule.clear()
+        auto_zoom.stop()
+        GPIO.cleanup()
+        exit()
     except Exception as e:
         print("Error {0}".format(str(e.args[0])).encode("utf-8"))
         schedule.clear()
         print("\nMotor stop")
-        motor.Stop()
+        auto_zoom.stop()
+        GPIO.cleanup()
+        exit()
+    except:
+        schedule.clear()
+        print("\nMotor stop")
+        auto_zoom.stop()
         GPIO.cleanup()
         exit()
 
