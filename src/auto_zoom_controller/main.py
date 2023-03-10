@@ -23,30 +23,31 @@ def run(interval_in_seconds, length_in_minutes):
 
         schedule.every(interval_in_seconds).seconds.do(auto_zoom.job)
 
-        while auto_zoom.activations() <= number_of_total_activations:
+        while auto_zoom.activations() < number_of_total_activations:
             schedule.run_pending()
             time.sleep(2)
 
         schedule.clear()
         auto_zoom.stop()
         GPIO.cleanup()
-        exit()
     except Exception as e:
         print("Error {0}".format(str(e.args[0])).encode("utf-8"))
         schedule.clear()
         print("Motor stop")
         auto_zoom.stop()
         GPIO.cleanup()
-        exit()
+        exit(1)
     except:
         schedule.clear()
         print("Motor stop")
         auto_zoom.stop()
         GPIO.cleanup()
-        exit()
+        exit(1)
+
+    exit(0)
 
 
 if __name__ == '__main__':
-    interval_in_seconds = 5
+    interval_in_seconds = 2
     length_in_minutes = 1
     run(interval_in_seconds, length_in_minutes)
