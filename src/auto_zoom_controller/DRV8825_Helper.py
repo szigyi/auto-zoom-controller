@@ -15,8 +15,8 @@ class Stepper:
     # '1/16step': A cycle = 200 * 16 steps
     # '1/32step': A cycle = 200 * 32 steps
     """
-    softward = 'softward'
-    hardward = 'hardward'
+    software = 'software'
+    hardware = 'hardware'
 
     fullstep = 'fullstep'
     halfstep = 'halfstep'

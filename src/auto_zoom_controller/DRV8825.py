@@ -7,8 +7,8 @@ MotorDir = [
 ]
 
 ControlMode = [
-    'hardward',
-    'softward',
+    'hardware',
+    'software',
 ]
 
 class DRV8825():
@@ -34,7 +34,7 @@ class DRV8825():
     def SetMicroStep(self, mode, stepformat):
         """
         (1) mode
-            'hardward' :    Use the switch on the module to control the microstep
+            'hardware' :    Use the switch on the module to control the microstep
             'software' :    Use software to control microstep pin levels
                 Need to put the All switch to 0
         (2) stepformat
