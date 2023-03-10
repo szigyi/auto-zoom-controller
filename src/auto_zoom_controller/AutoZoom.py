@@ -12,7 +12,7 @@ class AutoZoom:
     def __turn(self):
         print("Motor turning")
         self.motor.SetMicroStep(Stepper.software, Stepper.fullstep)
-        self.motor.TurnStep(Dir=Direction.forward, steps=self.turns, stepdelay=0.001)
+        self.motor.TurnStep(Dir=Direction.backward, steps=self.turns, stepdelay=0.001)
         self.motor.Stop()
 
     def job(self):
