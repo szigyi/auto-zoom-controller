@@ -29,13 +29,13 @@ class DRV8825():
         GPIO.output(pin, value)
         
     def Stop(self):
-        self.digital_write(self.enable_pin, 0)
+        self.digital_write(self.enable_pin, 1)
     
     def SetMicroStep(self, mode, stepformat):
         """
         (1) mode
             'hardward' :    Use the switch on the module to control the microstep
-            'softward' :    Use software to control microstep pin levels
+            'software' :    Use software to control microstep pin levels
                 Need to put the All switch to 0
         (2) stepformat
             ('fullstep', 'halfstep', '1/4step', '1/8step', '1/16step', '1/32step')
@@ -48,25 +48,25 @@ class DRV8825():
                      '1/32step': (1, 0, 1)}
 
         print("Control mode:", mode)
-        if mode == ControlMode[1]:
+        if (mode == ControlMode[1]):
             print("set pins")
             self.digital_write(self.mode_pins, microstep[stepformat])
         
     def TurnStep(self, Dir, steps, stepdelay=0.005):
-        if Dir == MotorDir[0]:
+        if (Dir == MotorDir[0]):
             print("forward")
-            self.digital_write(self.enable_pin, 1)
+            self.digital_write(self.enable_pin, 0)
             self.digital_write(self.dir_pin, 0)
-        elif Dir == MotorDir[1]:
+        elif (Dir == MotorDir[1]):
             print("backward")
-            self.digital_write(self.enable_pin, 1)
+            self.digital_write(self.enable_pin, 0)
             self.digital_write(self.dir_pin, 1)
         else:
             print("the dir must be : 'forward' or 'backward'")
-            self.digital_write(self.enable_pin, 0)
+            self.digital_write(self.enable_pin, 1)
             return
 
-        if steps == 0:
+        if (steps == 0):
             return
             
         print("turn step:", steps)
