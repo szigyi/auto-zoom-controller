@@ -8,10 +8,9 @@ import time
 from auto_zoom_controller.AutoZoom import AutoZoom
 
 
-def run(interval_in_seconds, length_in_minutes):
-    number_of_total_turns = 4000  # lens specific
-    turns = Logic.calculate_number_of_turns(number_of_total_turns, interval_in_seconds, length_in_minutes)
-    number_of_total_activations = Logic.calculate_number_of_activations(interval_in_seconds, length_in_minutes)
+def run(number_of_total_turns, interval_in_seconds, length_of_transition_in_minutes):
+    turns = Logic.calculate_number_of_turns(number_of_total_turns, interval_in_seconds, length_of_transition_in_minutes)
+    number_of_total_activations = Logic.calculate_number_of_activations(interval_in_seconds, length_of_transition_in_minutes)
 
     print("Activations: ", number_of_total_activations)
     print("Total Turns: ", number_of_total_turns)
@@ -48,6 +47,7 @@ def run(interval_in_seconds, length_in_minutes):
 
 
 if __name__ == '__main__':
-    interval_in_seconds = 2
-    length_in_minutes = 1
-    run(interval_in_seconds, length_in_minutes)
+    number_of_total_turns = 27200  # lens specific - 24-240mm Sony G
+    interval_in_seconds = 5
+    length_of_transition_in_minutes = 10
+    run(number_of_total_turns, interval_in_seconds, length_of_transition_in_minutes)
