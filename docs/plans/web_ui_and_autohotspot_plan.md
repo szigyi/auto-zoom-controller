@@ -1,6 +1,6 @@
 # Architecture & Implementation Plan: Raspberry Pi Web UI & Auto-Hotspot
 
-**Status**: Proposed; the web application, systemd service, and automatic hotspot are not implemented
+**Status**: Local dry-run UI/API MVP implemented; live hardware controls, systemd, and automatic hotspot remain proposed
 **Date**: 2026-10-06
 **Document**: `docs/plans/web_ui_and_autohotspot_plan.md`
 
@@ -42,16 +42,18 @@ graph TD
         AUTOZOOM --> MOTOR[DRV8825.py]
         MOTOR --> GPIO[gpio_adapter.py]
     end
-    subgraph Proposed Additions
-        UI[Phone Browser] <-->|HTTP / SSE| SERVER[web/server.py]
-        SERVER --> API[REST API]
-        API --> ENGINE[Shared Background Engine]
+    subgraph Implemented Local MVP
+        UI[Phone Browser] <-->|HTTP / polling| SERVER[web/server.py]
+        SERVER --> API[REST API: status / start / stop]
+        API --> ENGINE[AutoZoomEngine]
         ENGINE --> LOGIC
-           NETWORK[NetworkManager or systemd setup] -. makes reachable .-> SERVER
+    end
+    subgraph Future Pi Deployment
+        NETWORK[NetworkManager or systemd setup] -. exposes on trusted LAN .-> SERVER
     end
 ```
 
-The upper path is the current implementation. The lower path is a target architecture; none of its web, engine, API, or networking components currently exist.
+The CLI/GPIO path and localhost dry-run UI/API are implemented. Network exposure, production serving, live hardware controls, and networking configuration remain future work.
 
 ---
 
@@ -64,11 +66,11 @@ The upper path is the current implementation. The lower path is a target archite
 
 ### 3.2 Screen Structure & Components
 
-Illustrative only: connection state, address, and telemetry are not available until their supporting services and sensors are implemented.
+Target wireframe only. The MVP currently implements mission configuration, preview, status/progress, dry-run start, and stop. The hotspot, jog, hardware diagnostics, sensor readings, pause/resume, and event log below remain future work.
 
 ```
 +-----------------------------------------------------------+
-| [AutoZoom]        [WiFi: Field AP]                    |
+| [AutoZoom]        [MODE: DRY RUN]                     |
 +-----------------------------------------------------------+
 | 🟢 STATUS: IDLE / READY                                   |
 +-----------------------------------------------------------+
@@ -103,11 +105,11 @@ Illustrative only: connection state, address, and telemetry are not available un
 
 ---
 
-## 4. Frontend Code Architecture (Proposed)
+## 4. Frontend Code Architecture (Implemented MVP)
 
 - **Stack**: Vanilla HTML5, CSS, and JavaScript; avoid a Node build chain on the Pi.
 - **No external CDN dependencies needed**: Works 100% offline in the middle of nowhere without internet access.
-- **Planned file structure** (new `web/` files extend the current flat Python package):
+- **Current file structure** (`web/` is an optional package within the existing Python package):
   ```
   src/auto_zoom_controller/web/
   ├── __init__.py
@@ -123,55 +125,45 @@ Illustrative only: connection state, address, and telemetry are not available un
   ```
 
 ### 4.1 Resilient Telemetry Strategy (SSE / Polling)
-- Proposed transport: **Server-Sent Events (`/api/stream`)** with **REST polling (`/api/status`)** as a reconnect fallback.
-- On reconnect, the client should fetch current server state rather than assume the mission stopped or continue from stale browser state.
-- This behavior is not implemented; acceptance tests must cover lost connections and reconnects.
+- The MVP polls **`GET /api/status` once per second**; there is no SSE endpoint yet.
+- Reloading the page fetches authoritative engine state, so a browser disconnect does not cancel the in-process dry-run mission.
+- SSE may be added later if polling is insufficient on the target Pi.
 
 ---
 
 ## 5. Backend Architecture (Flask & Non-Blocking Engine)
 
-### 5.1 Proposed Technology: Python Flask
-- Flask is a proposal, not a current dependency; `pyproject.toml` currently declares no web framework.
-- Add Flask as an optional `web` extra so CLI-only installs do not acquire server dependencies.
-- Select and test a production server on the target Pi before deployment. Do not use Flask's development server as the field service.
-- Measure memory and startup behavior on the intended Pi model instead of assuming a fixed resource footprint.
+### 5.1 Implemented Technology: Python Flask
+- Flask is available through the optional `web` extra; CLI-only installs do not require it.
+- `auto-zoom-web` runs Flask on `127.0.0.1:5000` and uses the development server only for local dry-run work.
+- A production WSGI server and target-Pi resource measurements remain future deployment work.
 
 ### 5.2 Background Worker & State Machine
-The current `main.py` owns argument parsing, timing, and the activation loop, and calls `AutoZoom` directly. It has no background engine or run-state API. Extract an **`AutoZoomEngine`** that reuses the existing `Logic`, `AutoZoom`, and GPIO adapter modules; do not replace them with the previously proposed `core/logic.py` and `core/motor.py` duplicate structure.
+`AutoZoomEngine` now owns the shared absolute-time scheduler and reuses the existing `Logic`, `AutoZoom`, and GPIO adapter modules. The CLI calls it synchronously; the web API starts it on one background worker. The engine is in `engine.py` in the existing flat package, not a parallel `core/logic.py` or `core/motor.py` tree.
 
-The proposed engine has these states:
+The implemented states are:
 ```
-States: [IDLE] <---> [RUNNING] <---> [PAUSED]
-           \             |             /
-            \---> [STOPPED / ERROR] <-/
+IDLE --> RUNNING --> COMPLETED
+                         |  \
+                         |   --> ERROR
+                         --> STOPPING --> STOPPED
 ```
 
-- **Non-blocking Requests**: Start missions outside the web request thread, using a single worker so multiple requests cannot drive the motor concurrently.
-- **Thread Safety**: Protect state transitions and mission configuration; use cooperative pause/stop signals.
-- **Engine Methods**:
-  - `start(config)`: Validates and snapshots configuration before starting a mission.
-  - `pause()` / `resume()`: Cooperatively control scheduling and define what happens to an in-progress motor movement.
-  - `stop()`: Stops at a documented safe boundary, disables the motor, and releases GPIO.
-  - `jog(steps, direction)`: Allows bounded movement only after the safety/position policy is implemented.
-  - `get_state()`: Returns a snapshot of status, progress, elapsed time, next activation, and errors.
-- **CLI Compatibility**: The existing CLI should call the same engine after extraction; preserve its arguments and behavior with regression tests.
+- **Implemented methods**: `start(config)`, `run(config)`, `stop(wait=False)`, and `get_status()`.
+- **Single mission**: Concurrent starts are rejected; the worker continues if the browser disconnects, but its state is in memory and is lost if the server process exits.
+- **Stop behavior**: The event interrupts the interval wait. An activation already inside `AutoZoom.job()` finishes before the worker disables the motor and marks the mission stopped.
+- **Intentionally deferred**: Pause/resume and manual jog require additional interruption semantics and the position-safety policy; neither is exposed in this MVP.
+- **CLI Compatibility**: The existing CLI flags and synchronous behavior are preserved through the same engine.
 
-### 5.3 REST API Endpoints
+### 5.3 Implemented MVP Endpoints
 | Endpoint | Method | Description |
 |---|---|---|
 | `GET /` | GET | Serves Web UI |
 | `GET /api/status` | GET | Current engine status, progress, timing, and errors |
-| `GET /api/stream` | GET | Server-Sent Events stream for push updates |
-| `POST /api/diagnostics/jog` | POST | Move motor N steps for lens zeroing/testing |
-| `POST /api/diagnostics/test` | POST | Run 1 full rotation or sensor test |
-| `POST /api/start` | POST | Start timelapse with payload `{duration_min, interval_sec, total_steps, direction, microstep}` |
-| `POST /api/pause` | POST | Pause running timelapse |
-| `POST /api/resume` | POST | Resume paused timelapse |
-| `POST /api/stop` | POST | Emergency abort / stop |
-| `GET /api/system` | GET | Available system info (CPU temperature and network state when supported) |
+| `POST /api/start` | POST | Starts a validated dry-run mission; accepts interval, duration, steps, and direction |
+| `POST /api/stop` | POST | Requests stop between activations |
 
-Battery telemetry is not available in the current hardware design; expose it only if a sensor is added. Validate and bound all motor-affecting request fields server-side. Protect start, jog, and stop endpoints; a Wi-Fi password alone must not be treated as application authorization.
+The web process is bound to loopback, and `/api/start` creates `MissionConfig(dry_run=True)`. This is the same engine setting selected when the CLI parses `--dry-run`; the web server does not invoke the CLI parser or a subprocess. Requests are validated and bounded (minimum interval, maximum duration, steps, and activations); concurrent missions return `409`. Before binding this API to a LAN, add authentication and complete the hardware safety/position policy. SSE, jog, pause/resume, and system telemetry are not implemented.
 
 ---
 
@@ -182,14 +174,19 @@ The package currently has a flat layout:
 ```
 src/auto_zoom_controller/
 ├── main.py                # Existing CLI and timing loop
+├── engine.py              # Shared mission scheduler and status
 ├── Logic.py               # Existing motion calculations
 ├── AutoZoom.py            # Existing activation/motor wrapper
 ├── DRV8825.py             # Existing step/dir GPIO driver
 ├── DRV8825_Helper.py      # Existing direction/microstep constants
-└── gpio_adapter.py        # Existing real/mock GPIO proxy
+├── gpio_adapter.py        # Existing real/mock GPIO proxy
+└── web/
+    ├── server.py          # Local dry-run Flask API
+    ├── templates/index.html
+    └── static/             # Local CSS and JavaScript
 ```
 
-Add `web/` and an engine module within this package, reusing the existing modules instead of introducing parallel copies with different names. `auto-zoom` is the only current entry point; `auto-zoom-web` is a proposed entry point and must be added to `pyproject.toml` when implemented.
+`auto-zoom` and `auto-zoom-web` are registered entry points. The web assets are included as package data, and Flask remains optional for CLI-only installs.
 
 The current GPIO proxy automatically falls back to mock GPIO when the real driver is unavailable, and `--dry-run` explicitly selects emulation. This supports local API/UI tests, but does not validate real GPIO behavior.
 
@@ -247,23 +244,23 @@ sequenceDiagram
 
 ## 8. Phased Implementation Roadmap
 
-**Prerequisites**: Complete the installer validation in Phase 8 of `modernization_plan.md` and the position/timing safety work in `product_improvement_plan.md` before enabling live web jog or mission controls.
+**Prerequisites for live hardware/network control**: Complete the installer validation in Phase 8 of `modernization_plan.md` and the position/timing safety work in `product_improvement_plan.md`. The implemented web MVP is loopback-only and simulation-only.
 
 | Phase | Milestone | Deliverables |
 |---|---|---|
-| **Phase 1** | **Shared Engine** | Extract the scheduler and mission state from `main.py`; preserve CLI behavior and reuse current `Logic.py`, `AutoZoom.py`, and GPIO adapter. |
-| **Phase 2** | **Safety and Diagnostics** | Implement bounded jog and mission controls backed by the safety/position policy; provide dry-run state and supported hardware diagnostics. |
-| **Phase 3** | **API and Server** | Add Flask as an optional web dependency, authenticated/validated REST endpoints, and the status/SSE transport. |
-| **Phase 4** | **Mobile Web UI** | Add the responsive offline UI, mission summary, live status, reconnect behavior, and stop/pause/resume controls. |
-| **Phase 5** | **Pi Service and Networking** | Add a tested systemd service and opt-in hotspot setup for supported OS releases, with secure credentials and rollback instructions. |
-| **Phase 6** | **Integration and Field Validation** | Add engine/API tests, CLI regression tests, network/service tests where feasible, deployment instructions, and end-to-end Pi acceptance. |
+| **Phase 1** | **Shared Engine - MVP COMPLETE** | Shared absolute scheduler and status used by the synchronous CLI and one web worker; CLI behavior is regression-tested. |
+| **Phase 2** | **Safety and Diagnostics - PENDING** | Add position limits, verified stop semantics, and bounded jog before allowing live motor commands. |
+| **Phase 3** | **API and Server - MVP COMPLETE** | Optional Flask dependency; localhost-only status/start/stop API; starts force dry-run. Authentication and live controls remain pending before any LAN binding. |
+| **Phase 4** | **Mobile Web UI - MVP COMPLETE** | Responsive local form, mission preview, one-second status polling, progress, and stop control. Pause/resume and field-network access remain pending. |
+| **Phase 5** | **Pi Service and Networking - PENDING** | Add a tested systemd service and opt-in hotspot setup for supported OS releases, with secure credentials and rollback instructions. |
+| **Phase 6** | **Integration and Field Validation - MVP TESTS PASS; PI PENDING** | Engine/API tests and CLI regression tests pass locally; complete network/service tests and end-to-end Pi acceptance later. |
 
 ---
 
 ## 9. Verification & Acceptance Criteria
-1. **Desktop Simulation**: After implementation, the optional web server starts in mock mode on macOS/Linux; API/UI tests exercise dry-run without physical movement.
-2. **CLI Compatibility**: Existing `auto-zoom` options and behavior remain available without installing the optional web extra.
-3. **Safety and Authorization**: Invalid/out-of-range motor requests are rejected; motor-control routes are protected; stop and error paths leave GPIO and motor in a defined safe state.
-4. **Disconnect Recovery**: Closing the browser or dropping Wi-Fi does not terminate a mission; reconnecting retrieves authoritative server state.
-5. **Field Network Switching**: On every claimed supported Pi OS release, testing confirms client Wi-Fi operation and fallback AP behavior; a phone can reach the server on the documented address. No fixed 30-second claim is accepted until measured on hardware.
-6. **Service Lifecycle**: The systemd service starts, stops, and restarts cleanly; GPIO is released on shutdown, and existing network settings can be restored.
+1. **Desktop Simulation - MVP PASS**: Flask test-client coverage verifies the UI assets, status/start/stop APIs, validation, and forced dry-run; a local smoke run verifies the `auto-zoom-web` entry point.
+2. **CLI Compatibility - MVP PASS**: Existing CLI tests and dry-run continue to pass through the shared engine without requiring Flask at runtime.
+3. **Safety and Authorization - LIVE CONTROL PENDING**: The MVP rejects invalid inputs, binds only to loopback, and always uses mock GPIO. Add position limits and authentication before exposing live motor controls to a network.
+4. **Disconnect Recovery - MVP PASS**: Mission execution belongs to the server worker, not the browser; reopening the page reads current state from `/api/status`. Process restart recovery is not provided.
+5. **Field Network Switching - PENDING**: On every claimed supported Pi OS release, verify client Wi-Fi and fallback AP behavior and the documented address on hardware.
+6. **Service Lifecycle - PENDING**: Verify systemd start/stop/restart, GPIO cleanup, and network rollback after those services are implemented.

@@ -1,4 +1,4 @@
-.PHONY: help venv install dev test lint format check run-dry clean
+.PHONY: help venv install dev test lint format check run-dry web clean
 
 PYTHON := .venv/bin/python
 PIP := .venv/bin/pip
@@ -15,6 +15,7 @@ help:
 	@echo "  make format       - Format code with ruff"
 	@echo "  make check        - Run lint and test checks"
 	@echo "  make run-dry      - Run dry-run zoom simulation"
+	@echo "  make web          - Start the localhost engine dry-run web UI"
 	@echo "  make clean        - Remove build artifacts and caches"
 
 venv:
@@ -54,6 +55,9 @@ check: lint test
 
 run-dry:
 	$(PYTHON) -m auto_zoom_controller.main --dry-run -i 0.5 -d 0.05 -s 20
+
+web:
+	$(PYTHON) -m auto_zoom_controller.web.server
 
 clean:
 	rm -rf build/ dist/ *.egg-info .pytest_cache/ .ruff_cache/ htmlcov/ .coverage

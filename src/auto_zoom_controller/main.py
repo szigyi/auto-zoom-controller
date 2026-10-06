@@ -5,14 +5,12 @@ Uses absolute drift-free timing for predictable, precise intervalometer activati
 
 import argparse
 import sys
-import time
 from datetime import datetime
 from importlib import metadata
 
 from auto_zoom_controller import Logic
-from auto_zoom_controller.AutoZoom import AutoZoom
 from auto_zoom_controller.DRV8825_Helper import Direction, Stepper
-from auto_zoom_controller.gpio_adapter import GPIO, is_dry_run, set_dry_run
+from auto_zoom_controller.engine import AutoZoomEngine, MissionConfig
 
 DIRECTION_MAP = {
     "in": Direction.backward,
@@ -109,17 +107,9 @@ def run(
     dry_run: bool = False,
     start_time: datetime = None,
 ) -> int:
-    """Execute the automated zoom controller loop using drift-free absolute timing."""
-    if dry_run:
-        set_dry_run(True)
-
-    if is_dry_run():
-        print("[INFO] Operating in DRY-RUN mode (GPIO emulation).")
-
+    """Execute a zoom mission synchronously through the shared mission engine."""
     if start_time is None:
         start_time = datetime.now()
-
-    start_monotonic = time.monotonic()
 
     turns = Logic.calculate_number_of_turns(
         number_of_total_turns, interval_in_seconds, length_in_minutes
@@ -140,41 +130,30 @@ def run(
     print(f"  Microstep Format:   {step_format}")
     print("========================================")
 
-    auto_zoom = None
+    config = MissionConfig(
+        number_of_total_turns=number_of_total_turns,
+        interval_in_seconds=interval_in_seconds,
+        length_in_minutes=length_in_minutes,
+        direction=direction,
+        step_format=step_format,
+        step_delay=step_delay,
+        dry_run=dry_run,
+    )
+    engine = AutoZoomEngine()
     try:
-        auto_zoom = AutoZoom(
-            turns=turns,
-            direction=direction,
-            step_format=step_format,
-            step_delay=step_delay,
-        )
-        GPIO.output(12, 0)  # enable pin active low
-
-        # Drift-free absolute scheduling loop
-        for activation_index in range(1, number_of_total_activations + 1):
-            target_time = start_monotonic + (activation_index * interval_in_seconds)
-            time_to_wait = target_time - time.monotonic()
-
-            while time_to_wait > 0:
-                # Sleep in short increments to remain responsive to user interruption
-                sleep_slice = min(time_to_wait, 0.25)
-                time.sleep(sleep_slice)
-                time_to_wait = target_time - time.monotonic()
-
-            auto_zoom.job()
-
-        print("[INFO] Zoom cycle completed successfully.")
-        return 0
+        result = engine.run(config)
+        status = engine.get_status()
+        if status["state"] == "COMPLETED":
+            print("[INFO] Zoom cycle completed successfully.")
+        elif status["state"] == "ERROR":
+            print(f"[ERROR] {status['error']}", file=sys.stderr)
+        return result
     except KeyboardInterrupt:
         print("\n[INFO] Stopped by user (Ctrl+C).")
         return 0
     except Exception as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         return 1
-    finally:
-        if auto_zoom is not None:
-            auto_zoom.stop()
-        GPIO.cleanup()
 
 
 def main(argv=None) -> int:

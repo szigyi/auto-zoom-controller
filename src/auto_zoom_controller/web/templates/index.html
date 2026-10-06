@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f4f7f2">
+    <title>Auto Zoom | Mission Console</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Auto Zoom mission console">
+        <span class="brand-mark" aria-hidden="true">AZ</span>
+        <span>Auto Zoom</span>
+      </a>
+      <span class="mode"><span class="mode-dot"></span> SIMULATION ONLY</span>
+    </header>
+
+    <main class="console">
+      <section class="mission-heading" aria-labelledby="page-title">
+        <p class="eyebrow">LENS MOTION / TIMELAPSE</p>
+        <h1 id="page-title">Mission console</h1>
+        <p class="lede">Set a zoom sequence and preview its timing before using the hardware.</p>
+      </section>
+
+      <section class="status-strip" aria-label="Mission status">
+        <div>
+          <span class="label">STATUS</span>
+          <strong id="mission-state" aria-live="polite">IDLE</strong>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-meta">
+            <span id="progress-label">No active mission</span>
+            <span id="progress-percent">0%</span>
+          </div>
+          <progress id="mission-progress" max="1" value="0">0%</progress>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <section class="setup" aria-labelledby="setup-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">01 / CONFIGURATION</p>
+              <h2 id="setup-title">Zoom sequence</h2>
+            </div>
+          </div>
+
+          <form id="mission-form">
+            <div class="field-grid">
+              <label class="field">
+                <span>Transition duration</span>
+                <span class="input-unit"><input id="duration" name="duration" type="number" min="0.01" step="0.01" value="0.05" required><span>min</span></span>
+              </label>
+              <label class="field">
+                <span>Interval</span>
+                <span class="input-unit"><input id="interval" name="interval" type="number" min="0.01" step="0.1" value="0.5" required><span>sec</span></span>
+              </label>
+              <label class="field">
+                <span>Total motor steps</span>
+                <span class="input-unit"><input id="steps" name="steps" type="number" min="0" step="1" value="20" required><span>steps</span></span>
+              </label>
+              <label class="field">
+                <span>Zoom direction</span>
+                <select id="direction" name="direction">
+                  <option value="in">Zoom in</option>
+                  <option value="out">Zoom out</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="preview" aria-live="polite">
+              <div><span class="label">ACTIVATIONS</span><strong id="preview-activations">6</strong></div>
+              <div><span class="label">STEPS / ACTIVATION</span><strong id="preview-steps">3</strong></div>
+              <div><span class="label">EST. DURATION</span><strong id="preview-duration">30 sec</strong></div>
+            </div>
+
+            <div class="form-actions">
+              <button class="button button-start" id="start-button" type="submit">Start dry run</button>
+              <button class="button button-stop" id="stop-button" type="button" disabled>Stop mission</button>
+            </div>
+          </form>
+          <p class="notice"><span aria-hidden="true">i</span> This console always uses simulated GPIO. It cannot move the lens.</p>
+          <p class="error" id="error-message" role="alert" hidden></p>
+        </section>
+
+        <aside class="readout" aria-labelledby="readout-title">
+          <p class="eyebrow">02 / LIVE READOUT</p>
+          <h2 id="readout-title">Mission progress</h2>
+          <dl>
+            <div><dt>Completed activations</dt><dd id="completed-activations">0 / 0</dd></div>
+            <div><dt>Elapsed</dt><dd id="elapsed-time">0 sec</dd></div>
+            <div><dt>Remaining</dt><dd id="remaining-time">0 sec</dd></div>
+            <div><dt>Next activation</dt><dd id="next-activation">—</dd></div>
+          </dl>
+          <p class="connection"><span class="connection-dot"></span><span id="connection-state">Connecting to local controller</span></p>
+        </aside>
+      </div>
+    </main>
+    <footer>LOCAL CONTROL / DRY-RUN MODE</footer>
+  </body>
+</html>

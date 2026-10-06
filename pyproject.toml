@@ -30,6 +30,10 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.4.0",
     "pre-commit>=3.0.0",
+    "Flask>=3.0",
+]
+web = [
+    "Flask>=3.0",
 ]
 pi = [
     "rpi-lgpio>=0.6; platform_machine == 'aarch64' or platform_machine == 'armv7l' or platform_machine == 'armv6l'",
@@ -42,6 +46,7 @@ Homepage = "https://github.com/szigyi/auto-zoom-controller"
 [project.scripts]
 auto-zoom = "auto_zoom_controller.main:main"
 auto-zoom-controller = "auto_zoom_controller.main:main"
+auto-zoom-web = "auto_zoom_controller.web.server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -49,6 +54,9 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 exclude = ["test*"]
+
+[tool.setuptools.package-data]
+auto_zoom_controller = ["web/templates/*.html", "web/static/css/*.css", "web/static/js/*.js"]
 
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"

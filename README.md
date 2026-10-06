@@ -15,6 +15,7 @@ Automated lens zoom controller for timelapse photography using a Raspberry Pi, a
   - [1. Prerequisites](#1-prerequisites)
   - [2. Clone & Install](#2-clone--install)
 - [Development](#development)
+- [Local Web UI (Dry Run)](#local-web-ui-dry-run)
 - [Testing](#testing)
 - [Field Operation & Smartphone Control](#field-operation--smartphone-control)
   - [1. AutoHotspot Setup (Offline Wi-Fi Access Point)](#1-autohotspot-setup-offline-wi-fi-access-point)
@@ -131,6 +132,23 @@ make dev
 source .venv/bin/activate
 pre-commit
 ```
+
+## Local Web UI (Dry Run)
+
+Install the optional Flask dependency and start the local mission console from the project virtual environment:
+
+```bash
+pip install -e ".[web]"
+make web
+```
+
+Alternatively, run `auto-zoom-web` directly. Open `http://127.0.0.1:5000` on the same machine; use the numeric IPv4 loopback address rather than `localhost`, which may resolve to a different service. The server binds only to loopback. To view a Pi's local UI from another computer, forward it over SSH to a separate local port:
+
+```bash
+ssh -L 127.0.0.1:5001:127.0.0.1:5000 pi@autozoom.local
+```
+
+Then open `http://127.0.0.1:5001` on the computer running SSH. The UI runs `AutoZoomEngine` with the same `dry_run=True` setting used by CLI `--dry-run`, which selects `MockGPIO`; it does not invoke the CLI parser or launch a subprocess. This UI cannot move the lens. Real-hardware mode remains unavailable until the safety and Raspberry Pi verification phases are complete.
 
 ## Testing
 
