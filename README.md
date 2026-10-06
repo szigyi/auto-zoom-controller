@@ -14,6 +14,8 @@ Automated lens zoom controller for timelapse photography using a Raspberry Pi, a
 - [Raspberry Pi Setup](#raspberry-pi-setup)
   - [1. Prerequisites](#1-prerequisites)
   - [2. Clone & Install](#2-clone--install)
+- [Development](#development)
+- [Testing](#testing)
 - [Field Operation & Smartphone Control](#field-operation--smartphone-control)
   - [1. AutoHotspot Setup (Offline Wi-Fi Access Point)](#1-autohotspot-setup-offline-wi-fi-access-point)
   - [2. Connecting from Your Phone](#2-connecting-from-your-phone)
@@ -94,34 +96,61 @@ Before driving the motor under load, adjust the potentiometer next to the DRV882
 ## Raspberry Pi Setup
 
 ### 1. Prerequisites
-Log in to your Raspberry Pi terminal and install the required system libraries:
+Run the installer as your normal Raspberry Pi user with `sudo` access. It installs the required Python, virtual-environment, and Git packages. The one-command installation also requires `curl` and an internet connection:
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-pip python3-venv git
+sudo apt install -y curl
 ```
 
-> **Note for Raspberry Pi OS Bookworm (Debian 12):**
-> On Bookworm, the GPIO driver has transitioned. If `RPi.GPIO` fails to compile or run, install `rpi-lgpio`:
-> ```bash
-> pip install rpi-lgpio
-> ```
+The installer supports Raspberry Pi OS Bookworm and Bullseye. It selects the GPIO driver for the detected release; do not run the installer with `sudo`, because it creates the virtual environment and command runner in your user account.
 
 ### 2. Clone & Install
-Clone the repository onto the Raspberry Pi (typically into `~/dev/`):
+For a one-command installation, run:
 
 ```bash
-mkdir -p ~/dev && cd ~/dev
-git clone https://github.com/szigyi/auto-zoom-controller.git
-cd auto-zoom-controller
+curl -fsSL https://raw.githubusercontent.com/szigyi/auto-zoom-controller/main/scripts/install_pi.sh | bash
+```
 
-# Create and activate a virtual environment
-python3 -m venv .venv
+The installer clones the project into `~/dev/auto-zoom-controller` if needed, installs it in `.venv`, and creates `~/bin/auto-zoom`. To install from an existing checkout instead:
+
+```bash
+cd ~/dev/auto-zoom-controller
+./scripts/install_pi.sh
+```
+
+If `~/bin` is not on your `PATH`, run the controller as `~/bin/auto-zoom` or add `~/bin` to your shell's `PATH`.
+
+## Development
+
+Create the development environment and install the developer tools with the Makefile:
+
+```bash
+make venv
+make dev
 source .venv/bin/activate
+pre-commit
+```
 
-# Install the project and its dependencies (schedule, RPi.GPIO)
-pip install -e .
-pip install RPi.GPIO
+## Testing
+
+With the virtual environment active, run the test suite with:
+
+```bash
+make test
+```
+
+Run the lint and test checks together, or run a dry-run motor simulation:
+
+```bash
+make check
+make run-dry
+```
+
+To run tests directly with a terminal coverage report:
+
+```bash
+pytest --cov=auto_zoom_controller --cov-report=term
 ```
 
 ---
@@ -165,7 +194,7 @@ tmux new -s timelapse
 
 # 2. Activate virtual environment and navigate to project
 cd ~/dev/auto-zoom-controller
-source venv/bin/activate
+source .venv/bin/activate
 
 # 3. Launch the controller
 python3 -m auto_zoom_controller.main
@@ -183,23 +212,36 @@ tmux attach -t timelapse
 ## Configuration & Usage
 
 ### Parameters
-Parameters in `src/auto_zoom_controller/main.py`:
+Configure the controller through its command-line options:
 
-- **`interval_in_seconds`** (e.g., `2` or `5`): How often the motor advances. Should match your camera's intervalometer interval (e.g., if taking a photo every 5 seconds, set to 5).
-- **`length_in_minutes`** (e.g., `60`): Total duration of your timelapse shoot in minutes.
-- **`number_of_total_turns`** (e.g., `4000`): Total motor steps required to zoom your lens across its desired range.
-  - In full-step mode with a 1.8° stepper motor, 1 full motor revolution = 200 steps.
-  - If your gear ratio or belt pulley requires 20 motor rotations to cover the lens throw: $20 \times 200 = 4000\text{ steps}$.
+| Option | Description | Default |
+|---|---|---|
+| `-i`, `--interval` | Seconds between motor activations | `5.0` |
+| `-d`, `--duration` | Total transition duration in minutes | `10.0` |
+| `-s`, `--steps` | Total motor steps for the zoom throw | `27200` |
+| `--direction` | `in`, `out`, `backward`, or `forward` | `in` |
+| `--step-format` | `fullstep`, `halfstep`, `1/4step`, `1/8step`, `1/16step`, or `1/32step` | `fullstep` |
+| `--step-delay` | Delay between step pulses in seconds | `0.001` |
+| `--dry-run` | Emulate operation without sending GPIO signals | Off |
+| `-v`, `--version` | Print the installed package version | |
+| `-h`, `--help` | Show all options and exit | |
+
+For example, simulate a short 20-step movement, or run a 10-minute transition on hardware:
+
+```bash
+auto-zoom --dry-run --interval 0.5 --duration 0.05 --steps 20
+auto-zoom --interval 5 --duration 10 --steps 27200 --direction in
+```
 
 ### Calibrating Lens Zoom Throw
 1. Move the lens zoom ring manually to the starting position (e.g., 24mm wide).
 2. Measure how many motor steps are required to reach the target position (e.g., 70mm telephoto).
-3. Update `number_of_total_turns` in [main.py](src/auto_zoom_controller/main.py).
+3. Set the measured step count with the `--steps` option.
 
 ### Running the Script
 ```bash
 cd ~/dev/auto-zoom-controller
-python3 -m auto_zoom_controller.main
+auto-zoom
 ```
 
 Output:

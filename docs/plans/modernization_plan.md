@@ -1,6 +1,6 @@
 # Modernization Plan: Auto Zoom Controller
 
-**Status**: In Progress (Phases 1–5 Complete)
+**Status**: In Progress (Phases 1–7 Complete; Phase 8 Pi Verification Pending)
 **Date**: 2026-10-06
 **Document**: `docs/plans/modernization_plan.md`
 
@@ -46,8 +46,9 @@ graph TD
     P2 --> P3[Phase 3: Testing Infrastructure - Done]
     P3 --> P4[Phase 4: Tooling & Pre-commit - Done]
     P4 --> P5[Phase 5: GitHub Actions CI/CD - Done]
-    P5 --> P6[Phase 6: Raspberry Pi Installer]
-    P6 --> P7[Phase 7: Documentation & Verification]
+    P5 --> P6[Phase 6: Raspberry Pi Installer - Implemented]
+    P6 --> P7[Phase 7: Documentation & Verification - Done]
+    P7 --> P8[Phase 8: Raspberry Pi Installer Verification - Pi Required]
 ```
 
 ### Phase 1: Modern Packaging (PEP 621 / PEP 517) - [COMPLETED]
@@ -142,7 +143,7 @@ graph TD
   - Publishes artifacts to GitHub Releases.
   - Verification: release `v0.0.1` is live on [GitHub Releases](https://github.com/szigyi/auto-zoom-controller/releases).
 
-### Phase 6: Automated Raspberry Pi Deployment Script
+### Phase 6: Automated Raspberry Pi Deployment Script - [IMPLEMENTED]
 - **Installer Script (`scripts/install_pi.sh`)**:
   - Bash script with clear progress logging and error handling (`set -e`).
   - Checks Python 3 version and OS release.
@@ -154,21 +155,20 @@ graph TD
   - Installs `auto-zoom-controller` in editable mode (`pip install -e .`).
   - Verifies installation by running `auto-zoom --help` and dry-run check.
   - Generates a convenience runner script or alias (`~/bin/auto-zoom`).
+  - Local verification passed for shell syntax, help output, non-Pi rejection, and the CLI dry-run command. Device-side verification is tracked in Phase 8.
 
-### Phase 7: Documentation & Verification
-- **Update `README.md`**:
-  - Add 1-command installer instructions:
-    ```bash
-    curl -sSL https://raw.githubusercontent.com/szigyi/auto-zoom-controller/main/scripts/install_pi.sh | bash
-    # or
-    ./scripts/install_pi.sh
-    ```
-  - Document all CLI flags and dry-run testing.
-  - Update developer instructions (local setup with `venv`, `pytest`, and `make`).
-- **End-to-End Local Verification**:
-  - Run `pytest` on the local machine.
-  - Run `ruff check` and `ruff format`.
-  - Verify `auto-zoom --help` and `auto-zoom --dry-run` commands.
+### Phase 7: Documentation & Verification - [COMPLETED]
+- Updated `README.md` with the Pi installer instructions, all CLI flags, dry-run usage, and the Makefile-based developer and test workflows.
+- Updated `make check` to run both lint and tests, matching its documented purpose.
+- Local verification: `make check`, `ruff format --check .`, `auto-zoom --help`, and a short `auto-zoom --dry-run` all pass.
+
+### Phase 8: Raspberry Pi Installer Verification - [REQUIRES PI CONNECTION]
+- Connect to a Raspberry Pi over SSH or VS Code Remote-SSH after the installer changes are available in its checkout.
+- Record the Pi model, Raspberry Pi OS release/codename, architecture, and Python version; confirm the detected release is supported by the installer.
+- Run `./scripts/install_pi.sh` from the project checkout and confirm system prerequisites, the matching GPIO driver, and the `.venv` installation complete successfully.
+- Verify the GPIO module imports, then run `.venv/bin/auto-zoom --help`, a short `--dry-run`, and `~/bin/auto-zoom --help`.
+- Confirm the runner works from a fresh shell and record which OS/driver branch was tested. Do not run a live motor movement as part of installer verification.
+- **Acceptance**: installer exits successfully on the Pi, all CLI and runner checks pass, and the tested OS/driver combination is recorded. Any other supported OS release remains unverified until tested on that release.
 
 ---
 

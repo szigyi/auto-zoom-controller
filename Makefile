@@ -50,7 +50,7 @@ format:
 		echo "ruff not installed in .venv. Run 'make dev' to install dev tools."; \
 	fi
 
-check: test
+check: lint test
 
 run-dry:
 	$(PYTHON) -m auto_zoom_controller.main --dry-run -i 0.5 -d 0.05 -s 20
