@@ -14,6 +14,8 @@ Automated lens zoom controller for timelapse photography using a Raspberry Pi, a
 - [Raspberry Pi Setup](#raspberry-pi-setup)
   - [1. Prerequisites](#1-prerequisites)
   - [2. Clone & Install](#2-clone--install)
+- [Development](#development)
+- [Testing](#testing)
 - [Field Operation & Smartphone Control](#field-operation--smartphone-control)
   - [1. AutoHotspot Setup (Offline Wi-Fi Access Point)](#1-autohotspot-setup-offline-wi-fi-access-point)
   - [2. Connecting from Your Phone](#2-connecting-from-your-phone)
@@ -122,6 +124,31 @@ source .venv/bin/activate
 # Install the project and its dependencies (schedule, RPi.GPIO)
 pip install -e .
 pip install RPi.GPIO
+```
+
+## Development
+
+Activate the virtual environment, install the development dependencies, and run the pre-commit checks:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pre-commit
+```
+
+## Testing
+
+With the virtual environment active, run the test suite with:
+
+```bash
+pytest
+```
+
+To include a coverage report:
+
+```bash
+pytest --cov=auto_zoom_controller --cov-report=term
 ```
 
 ---
