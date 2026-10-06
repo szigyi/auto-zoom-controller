@@ -55,7 +55,7 @@
               </label>
               <label class="field">
                 <span>Interval</span>
-                <span class="input-unit"><input id="interval" name="interval" type="number" min="0.01" step="0.1" value="0.5" required><span>sec</span></span>
+                <span class="input-unit"><input id="interval" name="interval" type="number" min="0.01" step="0.01" value="0.5" required><span>sec</span></span>
               </label>
               <label class="field">
                 <span>Total motor steps</span>
@@ -78,6 +78,7 @@
 
             <div class="form-actions">
               <button class="button button-start" id="start-button" type="submit">Start dry run</button>
+              <button class="button button-pause" id="pause-button" type="button" disabled>Pause mission</button>
               <button class="button button-stop" id="stop-button" type="button" disabled>Stop mission</button>
             </div>
           </form>
@@ -89,6 +90,8 @@
           <p class="eyebrow">02 / LIVE READOUT</p>
           <h2 id="readout-title">Mission progress</h2>
           <dl>
+            <div><dt>Controller</dt><dd id="controller-host">—</dd></div>
+            <div><dt>CPU temperature</dt><dd id="cpu-temperature">Unavailable</dd></div>
             <div><dt>Completed activations</dt><dd id="completed-activations">0 / 0</dd></div>
             <div><dt>Elapsed</dt><dd id="elapsed-time">0 sec</dd></div>
             <div><dt>Remaining</dt><dd id="remaining-time">0 sec</dd></div>

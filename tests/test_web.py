@@ -19,7 +19,7 @@ class TestWebInterface(unittest.TestCase):
         self.client = self.app.test_client()
 
     def tearDown(self):
-        if self.engine.get_status()["state"] == "RUNNING":
+        if self.engine.get_status()["state"] in ("RUNNING", "PAUSED"):
             self.engine.stop(wait=True)
         mock_gpio.reset()
 
@@ -36,6 +36,11 @@ class TestWebInterface(unittest.TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Mission console", response.data)
+        self.assertIn(
+            b'id="interval" name="interval" type="number" min="0.01" step="0.01"', response.data
+        )
+        self.assertIn(b"Pause mission", response.data)
+        self.assertIn(b"Stop mission", response.data)
         self.assertEqual(self.client.get("/static/css/app.css").status_code, 200)
         self.assertEqual(self.client.get("/static/js/app.js").status_code, 200)
 
@@ -44,6 +49,13 @@ class TestWebInterface(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["state"], "IDLE")
         self.assertTrue(response.json["dry_run"])
+
+    def test_system_endpoint_returns_supported_fields(self):
+        response = self.client.get("/api/system")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json["hostname"])
+        self.assertIn("platform", response.json)
+        self.assertIn("cpu_temperature_c", response.json)
 
     def test_new_client_reads_active_mission_status(self):
         response = self.client.post(
@@ -111,6 +123,21 @@ class TestWebInterface(unittest.TestCase):
         self.assertEqual(self.client.post("/api/stop").status_code, 202)
         status = self.wait_for_state("STOPPED")
         self.assertEqual(status["activations"], 0)
+
+    def test_pause_resume_endpoints_control_dry_run_worker(self):
+        start = self.client.post(
+            "/api/start",
+            json={
+                "number_of_total_turns": 0,
+                "interval_in_seconds": 5,
+                "length_in_minutes": 1,
+            },
+        )
+        self.assertEqual(start.status_code, 202)
+        self.assertEqual(self.client.post("/api/pause").json["state"], "PAUSED")
+        self.assertEqual(self.client.post("/api/resume").json["state"], "RUNNING")
+        self.assertEqual(self.client.post("/api/stop").status_code, 202)
+        self.assertEqual(self.wait_for_state("STOPPED")["activations"], 0)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-.PHONY: help venv install dev test lint format check run-dry web clean
+.PHONY: help venv install dev test lint format check run-dry web service-install service-uninstall clean
 
 PYTHON := .venv/bin/python
 PIP := .venv/bin/pip
@@ -16,6 +16,8 @@ help:
 	@echo "  make check        - Run lint and test checks"
 	@echo "  make run-dry      - Run dry-run zoom simulation"
 	@echo "  make web          - Start the localhost engine dry-run web UI"
+	@echo "  make service-install - Install/start the user systemd web service (Linux)"
+	@echo "  make service-uninstall - Stop/remove the user systemd web service (Linux)"
 	@echo "  make clean        - Remove build artifacts and caches"
 
 venv:
@@ -58,6 +60,12 @@ run-dry:
 
 web:
 	$(PYTHON) -m auto_zoom_controller.web.server
+
+service-install:
+	./scripts/install_web_service.sh
+
+service-uninstall:
+	./scripts/install_web_service.sh --uninstall
 
 clean:
 	rm -rf build/ dist/ *.egg-info .pytest_cache/ .ruff_cache/ htmlcov/ .coverage

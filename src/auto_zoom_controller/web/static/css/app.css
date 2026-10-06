@@ -101,6 +101,7 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid #84bd98; ou
 .button { min-height: 44px; border: 0; border-radius: 5px; padding: 0 17px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .button-start { background: var(--green); color: #fff; }
 .button-start:hover:not(:disabled) { background: var(--green-dark); }
+.button-pause { background: #f7edda; color: #80551d; }
 .button-stop { border: 1px solid #e4b9b0; background: var(--red-pale); color: var(--red); }
 .button:disabled { opacity: 0.48; cursor: not-allowed; }
 .notice { display: flex; align-items: center; gap: 9px; margin: 18px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }

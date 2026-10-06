@@ -1,5 +1,6 @@
 """Shared mission scheduler for the CLI and optional web interface."""
 
+import logging
 import math
 import threading
 import time
@@ -9,6 +10,8 @@ from auto_zoom_controller import Logic
 from auto_zoom_controller.AutoZoom import AutoZoom
 from auto_zoom_controller.DRV8825_Helper import Direction, Stepper
 from auto_zoom_controller.gpio_adapter import GPIO, is_dry_run, set_dry_run
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -52,7 +55,8 @@ class AutoZoomEngine:
     """Runs one mission at a time and exposes a thread-safe status snapshot."""
 
     def __init__(self):
-        self._lock = threading.Lock()
+        self._condition = threading.Condition()
+        self._lock = self._condition
         self._stop_event = threading.Event()
         self._worker = None
         self._state = "IDLE"
@@ -62,6 +66,7 @@ class AutoZoomEngine:
         self._total_activations = 0
         self._steps_per_activation = 0
         self._started_at = None
+        self._paused_at = None
 
     def start(self, config: MissionConfig):
         config.validate()
@@ -84,6 +89,7 @@ class AutoZoomEngine:
                 config.length_in_minutes,
             )
             self._started_at = time.monotonic()
+            self._paused_at = None
             self._state = "RUNNING"
             self._worker = threading.Thread(target=self._run_mission, daemon=True)
             self._worker.start()
@@ -104,21 +110,44 @@ class AutoZoomEngine:
         return 1 if self.get_status()["state"] == "ERROR" else 0
 
     def stop(self, wait: bool = False) -> bool:
-        with self._lock:
-            if self._state != "RUNNING":
+        with self._condition:
+            if self._state not in ("RUNNING", "PAUSED"):
                 return False
             self._state = "STOPPING"
             self._stop_event.set()
             worker = self._worker
+            self._condition.notify_all()
 
         if wait and worker is not threading.current_thread():
             worker.join()
         return True
 
+    def pause(self) -> bool:
+        with self._condition:
+            if self._state != "RUNNING":
+                return False
+            self._paused_at = time.monotonic()
+            self._state = "PAUSED"
+            self._condition.notify_all()
+            return True
+
+    def resume(self) -> bool:
+        with self._condition:
+            if self._state != "PAUSED":
+                return False
+            now = time.monotonic()
+            self._started_at += now - self._paused_at
+            self._paused_at = None
+            self._state = "RUNNING"
+            self._condition.notify_all()
+            return True
+
     def get_status(self):
         with self._lock:
             now = time.monotonic()
             elapsed = max(0.0, now - self._started_at) if self._started_at is not None else 0.0
+            if self._state == "PAUSED" and self._paused_at is not None:
+                elapsed = max(0.0, elapsed - (now - self._paused_at))
             next_activation_in = None
             if self._state == "RUNNING" and self._config is not None:
                 next_activation_at = self._started_at + (
@@ -155,7 +184,7 @@ class AutoZoomEngine:
         try:
             set_dry_run(config.dry_run)
             if is_dry_run():
-                print("[INFO] Operating in DRY-RUN mode (GPIO emulation).")
+                logger.info("Operating in DRY-RUN mode (GPIO emulation)")
 
             auto_zoom = AutoZoom(
                 turns=self._steps_per_activation,
@@ -165,11 +194,23 @@ class AutoZoomEngine:
             )
             GPIO.output(12, 0)
 
-            start_monotonic = self._started_at
             for activation_index in range(1, self._total_activations + 1):
-                target_time = start_monotonic + (activation_index * config.interval_in_seconds)
-                time_to_wait = max(0.0, target_time - time.monotonic())
-                if self._stop_event.wait(time_to_wait):
+                while True:
+                    with self._condition:
+                        if self._stop_event.is_set():
+                            break
+                        while self._state == "PAUSED" and not self._stop_event.is_set():
+                            self._condition.wait()
+                        if self._stop_event.is_set():
+                            break
+                        target_time = self._started_at + (
+                            activation_index * config.interval_in_seconds
+                        )
+                        time_to_wait = max(0.0, target_time - time.monotonic())
+                        if time_to_wait == 0:
+                            break
+                        self._condition.wait(timeout=time_to_wait)
+                if self._stop_event.is_set():
                     break
 
                 auto_zoom.job()
@@ -179,6 +220,7 @@ class AutoZoomEngine:
             completed = not self._stop_event.is_set()
         except Exception as error:
             failure = error
+            logger.exception("Mission execution failed")
         finally:
             try:
                 if auto_zoom is not None:
@@ -196,5 +238,7 @@ class AutoZoomEngine:
                 self._state = "ERROR"
             elif completed:
                 self._state = "COMPLETED"
+                logger.info("Zoom cycle completed successfully")
             else:
                 self._state = "STOPPED"
+                logger.info("Zoom cycle stopped after %d activations", self._activations)

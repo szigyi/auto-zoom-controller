@@ -1,5 +1,6 @@
 const form = document.querySelector("#mission-form");
 const startButton = document.querySelector("#start-button");
+const pauseButton = document.querySelector("#pause-button");
 const stopButton = document.querySelector("#stop-button");
 const errorMessage = document.querySelector("#error-message");
 
@@ -50,7 +51,7 @@ function showError(message) {
 }
 
 function updateStatus(status) {
-  const active = status.state === "RUNNING" || status.state === "STOPPING";
+  const active = ["RUNNING", "PAUSED", "STOPPING"].includes(status.state);
   document.querySelector("#mission-state").textContent = status.state;
   document.querySelector("#completed-activations").textContent =
     `${status.activations} / ${status.total_activations}`;
@@ -68,9 +69,11 @@ function updateStatus(status) {
     : status.state === "COMPLETED" ? "Sequence complete" : "No active mission";
 
   startButton.disabled = active;
-  stopButton.disabled = status.state !== "RUNNING";
+  pauseButton.disabled = !["RUNNING", "PAUSED"].includes(status.state);
+  pauseButton.textContent = status.state === "PAUSED" ? "Resume mission" : "Pause mission";
+  stopButton.disabled = !["RUNNING", "PAUSED"].includes(status.state);
   for (const field of form.elements) {
-    if (field !== stopButton) field.disabled = active;
+    if (field !== pauseButton && field !== stopButton) field.disabled = active;
   }
 
   if (status.error) showError(status.error);
@@ -84,6 +87,20 @@ async function fetchStatus() {
   updateStatus(await response.json());
 }
 
+async function fetchSystemInfo() {
+  try {
+    const response = await fetch("/api/system", { cache: "no-store" });
+    if (!response.ok) throw new Error("Unable to read system information");
+    const system = await response.json();
+    document.querySelector("#controller-host").textContent = system.hostname;
+    document.querySelector("#cpu-temperature").textContent = system.cpu_temperature_c === null
+      ? "Unavailable"
+      : `${system.cpu_temperature_c.toFixed(1)} °C`;
+  } catch (error) {
+    document.querySelector("#cpu-temperature").textContent = "Unavailable";
+  }
+}
+
 async function pollStatus() {
   try {
     await fetchStatus();
@@ -92,6 +109,11 @@ async function pollStatus() {
     document.querySelector(".connection-dot").style.backgroundColor = "#a84437";
   }
   window.setTimeout(pollStatus, 1000);
+}
+
+function pollSystemInfo() {
+  fetchSystemInfo();
+  window.setTimeout(pollSystemInfo, 30000);
 }
 
 for (const input of [durationInput, intervalInput, stepsInput]) {
@@ -134,5 +156,19 @@ stopButton.addEventListener("click", async () => {
   }
 });
 
+pauseButton.addEventListener("click", async () => {
+  showError("");
+  const isPaused = document.querySelector("#mission-state").textContent === "PAUSED";
+  try {
+    const response = await fetch(isPaused ? "/api/resume" : "/api/pause", { method: "POST" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Unable to change mission pause state");
+    updateStatus(result);
+  } catch (error) {
+    showError(error.message);
+  }
+});
+
 updatePreview();
 pollStatus();
+pollSystemInfo();

@@ -1,0 +1,19 @@
+[Unit]
+Description=Auto Zoom Controller localhost dry-run web console
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=@PROJECT_DIR@
+ExecStart=@PROJECT_DIR@/.venv/bin/auto-zoom-web
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+UMask=0077
+
+[Install]
+WantedBy=default.target

@@ -1,6 +1,9 @@
+import logging
 import time
 
 from auto_zoom_controller.gpio_adapter import GPIO
+
+logger = logging.getLogger(__name__)
 
 MotorDir = [
     "forward",
@@ -51,29 +54,29 @@ class DRV8825:
             "1/32step": (1, 0, 1),
         }
 
-        print("Control mode:", mode)
+        logger.info("Microstep control mode: %s", mode)
         if mode == ControlMode[1]:
-            print("set pins")
+            logger.info("Setting microstep pins: format=%s pins=%s", stepformat, self.mode_pins)
             self.digital_write(self.mode_pins, microstep[stepformat])
 
     def TurnStep(self, Dir, steps, stepdelay=0.005):
         if Dir == MotorDir[0]:
-            print("forward")
+            logger.info("Stepper direction: forward")
             self.digital_write(self.enable_pin, 0)
             self.digital_write(self.dir_pin, 0)
         elif Dir == MotorDir[1]:
-            print("backward")
+            logger.info("Stepper direction: backward")
             self.digital_write(self.enable_pin, 0)
             self.digital_write(self.dir_pin, 1)
         else:
-            print("the dir must be : 'forward' or 'backward'")
+            logger.error("Invalid stepper direction %r; expected 'forward' or 'backward'", Dir)
             self.digital_write(self.enable_pin, 1)
             return
 
         if steps == 0:
             return
 
-        print("turn step:", steps)
+        logger.info("Issuing step pulses: steps=%d pulse_delay_seconds=%s", steps, stepdelay)
         for _ in range(steps):
             self.digital_write(self.step_pin, True)
             time.sleep(stepdelay)

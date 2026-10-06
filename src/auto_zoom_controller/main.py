@@ -4,6 +4,7 @@ Uses absolute drift-free timing for predictable, precise intervalometer activati
 """
 
 import argparse
+import logging
 import sys
 from datetime import datetime
 from importlib import metadata
@@ -11,6 +12,9 @@ from importlib import metadata
 from auto_zoom_controller import Logic
 from auto_zoom_controller.DRV8825_Helper import Direction, Stepper
 from auto_zoom_controller.engine import AutoZoomEngine, MissionConfig
+from auto_zoom_controller.logging_config import configure_logging
+
+logger = logging.getLogger(__name__)
 
 DIRECTION_MAP = {
     "in": Direction.backward,
@@ -89,6 +93,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="Emulate motor execution without sending hardware GPIO signals",
     )
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable timestamped DEBUG logs, including low-level motor details",
+    )
+    parser.add_argument(
         "-v",
         "--version",
         action="version",
@@ -108,6 +117,7 @@ def run(
     start_time: datetime = None,
 ) -> int:
     """Execute a zoom mission synchronously through the shared mission engine."""
+    configure_logging()
     if start_time is None:
         start_time = datetime.now()
 
@@ -118,17 +128,18 @@ def run(
         Logic.calculate_number_of_activations(interval_in_seconds, length_in_minutes)
     )
 
-    print("========================================")
-    print("Auto Zoom Controller Configuration:")
-    print(f"  Start Time:         {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"  Duration:           {length_in_minutes} min")
-    print(f"  Interval:           {interval_in_seconds} sec")
-    print(f"  Total Activations:  {number_of_total_activations}")
-    print(f"  Total Steps:        {number_of_total_turns}")
-    print(f"  Steps per Turn:     {turns}")
-    print(f"  Direction:          {direction}")
-    print(f"  Microstep Format:   {step_format}")
-    print("========================================")
+    logger.info(
+        "Starting zoom mission: start_time=%s duration_minutes=%s interval_seconds=%s "
+        "activations=%d total_steps=%d steps_per_activation=%d direction=%s step_format=%s",
+        start_time.strftime("%Y-%m-%d %H:%M:%S"),
+        length_in_minutes,
+        interval_in_seconds,
+        number_of_total_activations,
+        number_of_total_turns,
+        turns,
+        direction,
+        step_format,
+    )
 
     config = MissionConfig(
         number_of_total_turns=number_of_total_turns,
@@ -143,16 +154,14 @@ def run(
     try:
         result = engine.run(config)
         status = engine.get_status()
-        if status["state"] == "COMPLETED":
-            print("[INFO] Zoom cycle completed successfully.")
-        elif status["state"] == "ERROR":
-            print(f"[ERROR] {status['error']}", file=sys.stderr)
+        if status["state"] == "ERROR":
+            logger.error("Zoom mission ended with error: %s", status["error"])
         return result
     except KeyboardInterrupt:
-        print("\n[INFO] Stopped by user (Ctrl+C).")
+        logger.info("Stopped by user (Ctrl+C)")
         return 0
     except Exception as e:
-        print(f"[ERROR] {e}", file=sys.stderr)
+        logger.exception("Unable to run zoom mission: %s", e)
         return 1
 
 
@@ -160,6 +169,7 @@ def main(argv=None) -> int:
     """CLI entrypoint."""
     parser = create_parser()
     args = parser.parse_args(argv)
+    configure_logging(logging.DEBUG if args.verbose else logging.INFO)
 
     resolved_direction = DIRECTION_MAP.get(args.direction, Direction.backward)
 

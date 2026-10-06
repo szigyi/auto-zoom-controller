@@ -1,9 +1,16 @@
 """Local Flask API and web server for dry-run missions."""
 
+import logging
+import platform
+import socket
+from pathlib import Path
+
 from flask import Flask, jsonify, render_template, request
+from waitress import serve
 
 from auto_zoom_controller.DRV8825_Helper import Stepper
 from auto_zoom_controller.engine import AutoZoomEngine, MissionConfig
+from auto_zoom_controller.logging_config import configure_logging
 from auto_zoom_controller.main import DIRECTION_MAP
 
 MIN_INTERVAL_SECONDS = 0.01
@@ -21,6 +28,17 @@ def _number(payload, key, default, integer=False):
     return value
 
 
+def _cpu_temperature_c():
+    sensor_path = Path("/sys/class/thermal/thermal_zone0/temp")
+    try:
+        temperature = float(sensor_path.read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        return None
+    if temperature > 1000:
+        temperature /= 1000
+    return round(temperature, 1)
+
+
 def create_app(engine=None):
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
@@ -34,6 +52,14 @@ def create_app(engine=None):
     @app.get("/api/status")
     def status():
         return jsonify(mission_engine.get_status())
+
+    @app.get("/api/system")
+    def system():
+        return jsonify(
+            hostname=socket.gethostname(),
+            platform=platform.system(),
+            cpu_temperature_c=_cpu_temperature_c(),
+        )
 
     @app.post("/api/start")
     def start():
@@ -79,11 +105,25 @@ def create_app(engine=None):
             return jsonify(error="no mission is running"), 409
         return jsonify(mission_engine.get_status()), 202
 
+    @app.post("/api/pause")
+    def pause():
+        if not mission_engine.pause():
+            return jsonify(error="no running mission to pause"), 409
+        return jsonify(mission_engine.get_status()), 202
+
+    @app.post("/api/resume")
+    def resume():
+        if not mission_engine.resume():
+            return jsonify(error="no paused mission to resume"), 409
+        return jsonify(mission_engine.get_status()), 202
+
     return app
 
 
 def main():
-    create_app().run(host="127.0.0.1", port=5000, threaded=True, use_reloader=False)
+    configure_logging()
+    logging.getLogger(__name__).info("Serving local dry-run UI at http://127.0.0.1:8080")
+    serve(create_app(), host="127.0.0.1", port=8080)
 
 
 if __name__ == "__main__":

@@ -142,13 +142,30 @@ pip install -e ".[web]"
 make web
 ```
 
-Alternatively, run `auto-zoom-web` directly. Open `http://127.0.0.1:5000` on the same machine; use the numeric IPv4 loopback address rather than `localhost`, which may resolve to a different service. The server binds only to loopback. To view a Pi's local UI from another computer, forward it over SSH to a separate local port:
+Alternatively, run `auto-zoom-web` directly. Open `http://127.0.0.1:8080` on the same machine; use the numeric IPv4 loopback address rather than `localhost`, which may resolve to a different service. The server binds only to loopback. To view a Pi's local UI from another computer, forward it over SSH:
 
 ```bash
-ssh -L 127.0.0.1:5001:127.0.0.1:5000 pi@autozoom.local
+ssh -L 127.0.0.1:8080:127.0.0.1:8080 pi@autozoom.local
 ```
 
-Then open `http://127.0.0.1:5001` on the computer running SSH. The UI runs `AutoZoomEngine` with the same `dry_run=True` setting used by CLI `--dry-run`, which selects `MockGPIO`; it does not invoke the CLI parser or launch a subprocess. This UI cannot move the lens. Real-hardware mode remains unavailable until the safety and Raspberry Pi verification phases are complete.
+Then open `http://127.0.0.1:8080` on the computer running SSH. To keep the localhost UI running as a per-user systemd service on Raspberry Pi OS:
+
+```bash
+make service-install
+systemctl --user status autozoom-web
+```
+
+The user service starts at login. To allow it to start at boot before login, enable lingering with `sudo loginctl enable-linger "$USER"`. Remove the service with `make service-uninstall`. The UI remains loopback-only; use the SSH tunnel above for remote access. The installer requires a systemd user manager and has not yet been run on Raspberry Pi OS.
+
+After the base Pi installer has completed, install the web extra before installing the service:
+
+```bash
+cd ~/dev/auto-zoom-controller
+.venv/bin/pip install -e ".[web]"
+make service-install
+```
+
+The UI runs `AutoZoomEngine` with the same `dry_run=True` setting used by CLI `--dry-run`, which selects `MockGPIO`; it does not invoke the CLI parser or launch a subprocess. This UI cannot move the lens. Real-hardware mode remains unavailable until the safety and Raspberry Pi verification phases are complete.
 
 ## Testing
 
@@ -241,6 +258,7 @@ Configure the controller through its command-line options:
 | `--step-format` | `fullstep`, `halfstep`, `1/4step`, `1/8step`, `1/16step`, or `1/32step` | `fullstep` |
 | `--step-delay` | Delay between step pulses in seconds | `0.001` |
 | `--dry-run` | Emulate operation without sending GPIO signals | Off |
+| `--verbose` | Enable timestamped DEBUG logs, including low-level motor details | Off |
 | `-v`, `--version` | Print the installed package version | |
 | `-h`, `--help` | Show all options and exit | |
 
@@ -249,7 +267,10 @@ For example, simulate a short 20-step movement, or run a 10-minute transition on
 ```bash
 auto-zoom --dry-run --interval 0.5 --duration 0.05 --steps 20
 auto-zoom --interval 5 --duration 10 --steps 27200 --direction in
+auto-zoom --dry-run --verbose --interval 0.5 --duration 0.05 --steps 20
 ```
+
+Application logs include timestamps. Normal runs show INFO-level mission and activation events; `--verbose` adds DEBUG-level driver and step details.
 
 ### Calibrating Lens Zoom Throw
 1. Move the lens zoom ring manually to the starting position (e.g., 24mm wide).

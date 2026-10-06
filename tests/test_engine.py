@@ -58,6 +58,29 @@ class TestAutoZoomEngine(unittest.TestCase):
         self.assertEqual(status["state"], "STOPPED")
         self.assertEqual(status["activations"], 0)
 
+    def test_pause_freezes_schedule_until_resumed(self):
+        engine = AutoZoomEngine()
+        config = MissionConfig(
+            number_of_total_turns=0,
+            interval_in_seconds=0.25,
+            length_in_minutes=0.017,
+            dry_run=True,
+        )
+
+        engine.start(config)
+        self.assertTrue(engine.pause())
+        threading.Event().wait(0.35)
+        paused_status = engine.get_status()
+        self.assertEqual(paused_status["state"], "PAUSED")
+        self.assertEqual(paused_status["activations"], 0)
+
+        self.assertTrue(engine.resume())
+        threading.Event().wait(0.02)
+        self.assertEqual(engine.get_status()["activations"], 0)
+        completed_status = self.wait_for_state(engine, "COMPLETED")
+        self.assertEqual(completed_status["total_activations"], 4)
+        self.assertEqual(completed_status["activations"], 4)
+
     def test_rejects_invalid_mission_config(self):
         engine = AutoZoomEngine()
         with self.assertRaisesRegex(ValueError, "cannot be negative"):

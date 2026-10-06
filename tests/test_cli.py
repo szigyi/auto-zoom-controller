@@ -1,5 +1,7 @@
 """Unit tests for command-line interface argument parsing."""
 
+import subprocess
+import sys
 import unittest
 
 from auto_zoom_controller.DRV8825_Helper import Direction, Stepper
@@ -22,6 +24,7 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args.step_format, Stepper.fullstep)
         self.assertEqual(args.step_delay, 0.001)
         self.assertFalse(args.dry_run)
+        self.assertFalse(args.verbose)
 
     def test_custom_arguments(self):
         """Test parsing user-supplied flags."""
@@ -39,6 +42,7 @@ class TestCLI(unittest.TestCase):
             "--step-delay",
             "0.002",
             "--dry-run",
+            "--verbose",
         ]
         args = self.parser.parse_args(argv)
         self.assertEqual(args.interval_in_seconds, 2.5)
@@ -48,6 +52,7 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args.step_format, "halfstep")
         self.assertEqual(args.step_delay, 0.002)
         self.assertTrue(args.dry_run)
+        self.assertTrue(args.verbose)
 
     def test_direction_mapping(self):
         """Test direction string mappings to internal Direction constants."""
@@ -70,6 +75,36 @@ class TestCLI(unittest.TestCase):
         """Test executing main() with dry-run parameters."""
         ret = main(["--dry-run", "-i", "0.05", "-d", "0.002", "-s", "10"])
         self.assertEqual(ret, 0)
+
+    def test_cli_logs_include_timestamps_and_verbose_driver_details(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "auto_zoom_controller.main",
+                "--dry-run",
+                "--verbose",
+                "--interval",
+                "0.01",
+                "--duration",
+                "0.001",
+                "--steps",
+                "0",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        timestamp = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
+        self.assertRegex(
+            result.stderr,
+            rf"(?m)^{timestamp} INFO __main__: Starting zoom mission:",
+        )
+        self.assertRegex(
+            result.stderr,
+            rf"(?m)^{timestamp} INFO auto_zoom_controller\.DRV8825: Microstep control mode:",
+        )
 
 
 if __name__ == "__main__":
