@@ -1,5 +1,87 @@
 [build-system]
-requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=61.0", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "auto-zoom-controller"
+dynamic = ["version"]
+description = "Use a stepper motor to zoom a lens during timelapse"
+readme = "README.md"
+license = { text = "BSD-2-Clause" }
+authors = [
+    { name = "Szabolcs Szilagyi" }
+]
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: POSIX :: Linux",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4.0",
+    "pre-commit>=3.0.0",
+]
+pi = [
+    "rpi-lgpio>=0.6; platform_machine == 'aarch64' or platform_machine == 'armv7l' or platform_machine == 'armv6l'",
+]
+
+[project.urls]
+Homepage = "https://github.com/szigyi/auto-zoom-controller"
+"Bug Tracker" = "https://github.com/szigyi/auto-zoom-controller/issues"
+
+[project.scripts]
+auto-zoom = "auto_zoom_controller.main:main"
+auto-zoom-controller = "auto_zoom_controller.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["test*"]
+
 [tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "node-and-date"
+fallback_version = "0.1.0"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line length handled by formatter
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["auto_zoom_controller"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

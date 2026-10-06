@@ -1,7 +1,6 @@
-
 class Direction:
-    forward = 'forward'
-    backward = 'backward'
+    forward = "forward"
+    backward = "backward"
 
 
 class Stepper:
@@ -15,12 +14,13 @@ class Stepper:
     # '1/16step': A cycle = 200 * 16 steps
     # '1/32step': A cycle = 200 * 32 steps
     """
-    software = 'software'
-    hardware = 'hardware'
 
-    fullstep = 'fullstep'
-    halfstep = 'halfstep'
-    step_1_4 = '1/4step'
-    step_1_8 = '1/8step'
-    step_1_16 = '1/16step'
-    step_1_32 = '1/32step'
+    software = "software"
+    hardware = "hardware"
+
+    fullstep = "fullstep"
+    halfstep = "halfstep"
+    step_1_4 = "1/4step"
+    step_1_8 = "1/8step"
+    step_1_16 = "1/16step"
+    step_1_32 = "1/32step"
