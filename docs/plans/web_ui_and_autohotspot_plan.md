@@ -1,6 +1,6 @@
 # Architecture & Implementation Plan: Raspberry Pi Web UI & Auto-Hotspot
 
-**Status**: Proposed
+**Status**: Local dry-run UI/API MVP implemented; live hardware controls, systemd, and automatic hotspot remain proposed
 **Date**: 2026-10-06
 **Document**: `docs/plans/web_ui_and_autohotspot_plan.md`
 
@@ -21,12 +21,12 @@ The **Auto Zoom Controller** is used outdoors for hours-long timelapse shoots wh
    - Real-time calculations: Activations, steps per activation, duration per step, estimated completion time.
 4. **Resilient Background Execution & Live Monitoring**:
    - Non-blocking execution running as a background daemon/thread.
-   - If the smartphone screen turns off, connection drops, or the browser closes, the timelapse **never stops**.
-   - Reconnecting any browser immediately syncs with the live progress and telemetry.
+    - Browser closure or a temporary client disconnect does not stop a mission; hardware, power, and process failures remain explicit failure cases.
+    - Reconnecting retrieves authoritative mission status from the Pi.
    - Emergency Stop, Pause, and Resume capabilities.
-5. **Seamless Dual-Mode Networking (Dev Mode vs. Prod Mode)**:
-   - **Dev Mode (Home / Studio)**: Connects automatically to known home Wi-Fi; reachable via local network hostname (`autozoom.local`) or local IP.
-   - **Prod Mode (Field)**: If home Wi-Fi is not detected within 15–20 seconds of boot, automatically switches into an Access Point / Hotspot (`AutoZoom-Field`) with captive DHCP (`192.168.4.1` or `10.42.0.1`), allowing direct phone connection without manual intervention.
+5. **Home and Field Networking**:
+    - **Home mode**: Use a configured home Wi-Fi connection; a local hostname is available only if mDNS is configured.
+    - **Field mode**: Optionally fall back to an access point when the configured client network is unavailable. Choose and verify the trigger, address, DHCP range, and credentials for each supported OS; none are currently configured by this project.
 6. **Code Reusability & Minimal Core Changes**:
    - Existing motor logic (`Logic.py`, `AutoZoom.py`, `DRV8825.py`, `DRV8825_Helper.py`) remains untouched or cleanly refactored so that **both CLI and Web UI** share the exact same underlying motor controller.
 
@@ -36,36 +36,24 @@ The **Auto Zoom Controller** is used outdoors for hours-long timelapse shoots wh
 
 ```mermaid
 graph TD
-    subgraph Client Device [Smartphone / Browser]
-        UI[Mobile-First Web UI]
+    subgraph Existing Application
+        CLI[CLI: main.py] --> LOGIC[Logic.py]
+        LOGIC --> AUTOZOOM[AutoZoom.py]
+        AUTOZOOM --> MOTOR[DRV8825.py]
+        MOTOR --> GPIO[gpio_adapter.py]
     end
-
-    subgraph Raspberry Pi
-        subgraph Networking [Auto-Hotspot Service]
-            NET[WiFi Mode Switcher]
-            NET -->|Known Home WiFi Present| STA[Client Mode: Home WiFi]
-            NET -->|No Home WiFi Found| AP[Hotspot AP: AutoZoom-Field]
-        end
-
-        subgraph Application Server [Python Flask / Standard App]
-            HTTP[Flask Web Server]
-            API[REST & SSE API]
-            STATE[State Machine & Telemetry Engine]
-            HTTP --- API
-            API --- STATE
-        end
-
-        subgraph Core Motor Driver [Shared Logic]
-            STATE --> ENGINE[AutoZoom Engine / Thread]
-            CLI[Command Line Interface] --> ENGINE
-            ENGINE --> LOGIC[Logic.py]
-            ENGINE --> MOTOR[DRV8825.py & DRV8825_Helper.py]
-            MOTOR --> GPIO[RPi GPIO / Mock Adapter]
-        end
+    subgraph Implemented Local MVP
+        UI[Phone Browser] <-->|HTTP / polling| SERVER[web/server.py]
+        SERVER --> API[REST API: status / start / stop]
+        API --> ENGINE[AutoZoomEngine]
+        ENGINE --> LOGIC
     end
-
-    UI <-->|HTTP / SSE| API
+    subgraph Future Pi Deployment
+        NETWORK[NetworkManager or systemd setup] -. exposes on trusted LAN .-> SERVER
+    end
 ```
+
+The CLI/GPIO path and localhost dry-run UI/API are implemented. Network exposure, production serving, live hardware controls, and networking configuration remain future work.
 
 ---
 
@@ -78,9 +66,11 @@ graph TD
 
 ### 3.2 Screen Structure & Components
 
+Target wireframe only. The MVP currently implements mission configuration, preview, status/progress, dry-run start, and stop. The hotspot, jog, hardware diagnostics, sensor readings, pause/resume, and event log below remain future work.
+
 ```
 +-----------------------------------------------------------+
-| [⚡ AutoZoom]     [WiFi: Hotspot (192.168.4.1)]   [42°C]  |
+| [AutoZoom]        [MODE: DRY RUN]                     |
 +-----------------------------------------------------------+
 | 🟢 STATUS: IDLE / READY                                   |
 +-----------------------------------------------------------+
@@ -115,105 +105,106 @@ graph TD
 
 ---
 
-## 4. Frontend Code Architecture (Lightweight & Standard)
+## 4. Frontend Code Architecture (Implemented MVP)
 
-To avoid complex build pipelines, `node_modules`, and compilation on the Raspberry Pi:
-- **Stack**: Standard Vanilla HTML5, Vanilla CSS3 (CSS variables, flexbox/grid), and ES6+ JavaScript.
+- **Stack**: Vanilla HTML5, CSS, and JavaScript; avoid a Node build chain on the Pi.
 - **No external CDN dependencies needed**: Works 100% offline in the middle of nowhere without internet access.
-- **File Structure**:
+- **Current file structure** (`web/` is an optional package within the existing Python package):
   ```
   src/auto_zoom_controller/web/
   ├── __init__.py
-  ├── server.py             # Flask application & API routes
+  ├── server.py             # Flask application and API routes
   ├── templates/
-  │   └── index.html        # Clean semantic HTML5 layout
+  │   └── index.html
   └── static/
       ├── css/
-      │   └── app.css       # Responsive dark-theme styling
+      │   └── app.css
       └── js/
-          ├── app.js        # UI logic, state listener, event handlers
-          └── api.js        # REST client & SSE/polling connection
+          ├── app.js
+          └── api.js
   ```
 
 ### 4.1 Resilient Telemetry Strategy (SSE / Polling)
-- Uses **Server-Sent Events (`/api/stream`)** with automatic fallback to **REST polling (`/api/status` every 1.5s)**.
-- If the phone screen locks or Wi-Fi drops momentarily, when the browser tab re-opens, it queries `GET /api/status` and instantly re-renders the current progress, elapsed time, and countdown.
+- The MVP polls **`GET /api/status` once per second**; there is no SSE endpoint yet.
+- Reloading the page fetches authoritative engine state, so a browser disconnect does not cancel the in-process dry-run mission.
+- SSE may be added later if polling is insufficient on the target Pi.
 
 ---
 
 ## 5. Backend Architecture (Flask & Non-Blocking Engine)
 
-### 5.1 Technology Choice: Python Flask
-- **Why Flask?**
-  - Standard, battle-tested, lightweight micro-framework.
-  - Zero heavy C-extension compilation required on Raspberry Pi (available via `pip` or system `python3-flask`).
-  - Native WSGI support, effortlessly run with `waitress` or `gunicorn` or builtin dev server.
-  - Minimal memory footprint (<30MB RAM), ideal for Pi Zero W, Pi 3, Pi 4, and Pi 5.
+### 5.1 Implemented Technology: Python Flask
+- Flask is available through the optional `web` extra; CLI-only installs do not require it.
+- `auto-zoom-web` runs Flask on `127.0.0.1:5000` and uses the development server only for local dry-run work.
+- A production WSGI server and target-Pi resource measurements remain future deployment work.
 
 ### 5.2 Background Worker & State Machine
-The core motor runner cannot block the web request thread. We introduce an **`AutoZoomEngine`**:
+`AutoZoomEngine` now owns the shared absolute-time scheduler and reuses the existing `Logic`, `AutoZoom`, and GPIO adapter modules. The CLI calls it synchronously; the web API starts it on one background worker. The engine is in `engine.py` in the existing flat package, not a parallel `core/logic.py` or `core/motor.py` tree.
+
+The implemented states are:
 ```
-States: [IDLE] <---> [RUNNING] <---> [PAUSED]
-           \             |             /
-            \---> [STOPPED / ERROR] <-/
+IDLE --> RUNNING --> COMPLETED
+                         |  \
+                         |   --> ERROR
+                         --> STOPPING --> STOPPED
 ```
 
-- **Threaded Execution**: Runs on a dedicated daemon thread `threading.Thread`.
-- **Thread Safety**: State transitions protected via `threading.Lock` and pause/stop events via `threading.Event`.
-- **Engine Methods**:
-  - `start(config)`: Validates config, starts background thread.
-  - `pause()` / `resume()`: Halts/resumes scheduling.
-  - `stop()`: Clears schedule, powers down motor coils, releases GPIO.
-  - `jog(steps, direction)`: Executes manual diagnostic movement.
-  - `get_state()`: Returns snapshot dictionary (status, progress %, elapsed, remaining, next_step_in_seconds, current_step, total_steps).
+- **Implemented methods**: `start(config)`, `run(config)`, `stop(wait=False)`, and `get_status()`.
+- **Single mission**: Concurrent starts are rejected; the worker continues if the browser disconnects, but its state is in memory and is lost if the server process exits.
+- **Stop behavior**: The event interrupts the interval wait. An activation already inside `AutoZoom.job()` finishes before the worker disables the motor and marks the mission stopped.
+- **Intentionally deferred**: Pause/resume and manual jog require additional interruption semantics and the position-safety policy; neither is exposed in this MVP.
+- **CLI Compatibility**: The existing CLI flags and synchronous behavior are preserved through the same engine.
 
-### 5.3 REST API Endpoints
+### 5.3 Implemented MVP Endpoints
 | Endpoint | Method | Description |
 |---|---|---|
 | `GET /` | GET | Serves Web UI |
-| `GET /api/status` | GET | Current engine status, progress, battery/temp metrics |
-| `GET /api/stream` | GET | Server-Sent Events stream for push updates |
-| `POST /api/diagnostics/jog` | POST | Move motor N steps for lens zeroing/testing |
-| `POST /api/diagnostics/test` | POST | Run 1 full rotation or sensor test |
-| `POST /api/start` | POST | Start timelapse with payload `{duration_min, interval_sec, total_steps, direction, microstep}` |
-| `POST /api/pause` | POST | Pause running timelapse |
-| `POST /api/resume` | POST | Resume paused timelapse |
-| `POST /api/stop` | POST | Emergency abort / stop |
-| `GET /api/system` | GET | System info (CPU temp, Wi-Fi SSID/mode, IP address) |
+| `GET /api/status` | GET | Current engine status, progress, timing, and errors |
+| `POST /api/start` | POST | Starts a validated dry-run mission; accepts interval, duration, steps, and direction |
+| `POST /api/stop` | POST | Requests stop between activations |
+
+The web process is bound to loopback, and `/api/start` creates `MissionConfig(dry_run=True)`. This is the same engine setting selected when the CLI parses `--dry-run`; the web server does not invoke the CLI parser or a subprocess. Requests are validated and bounded (minimum interval, maximum duration, steps, and activations); concurrent missions return `409`. Before binding this API to a LAN, add authentication and complete the hardware safety/position policy. SSE, jog, pause/resume, and system telemetry are not implemented.
 
 ---
 
 ## 6. Shared Core (CLI & Web UI Parity)
 
-The existing CLI (`main.py`) and the Web UI will both share the exact same motor controller:
+The package currently has a flat layout:
 
 ```
 src/auto_zoom_controller/
-├── core/
-│   ├── engine.py          # State-managed background executor (NEW)
-│   ├── logic.py           # Calculations (existing Logic.py)
-│   ├── motor.py           # Motor hardware driver (existing DRV8825.py)
-│   └── gpio_adapter.py    # GPIO abstraction + Mock adapter for dev
-├── cli/
-│   └── main.py            # CLI entry point (auto-zoom)
+├── main.py                # Existing CLI and timing loop
+├── engine.py              # Shared mission scheduler and status
+├── Logic.py               # Existing motion calculations
+├── AutoZoom.py            # Existing activation/motor wrapper
+├── DRV8825.py             # Existing step/dir GPIO driver
+├── DRV8825_Helper.py      # Existing direction/microstep constants
+├── gpio_adapter.py        # Existing real/mock GPIO proxy
 └── web/
-    └── server.py          # Web UI entry point (auto-zoom-web)
+    ├── server.py          # Local dry-run Flask API
+    ├── templates/index.html
+    └── static/             # Local CSS and JavaScript
 ```
 
-- When running `auto-zoom -i 2 -d 60 -s 4000`: runs CLI mode directly in terminal.
-- When running `auto-zoom-web --port 5000`: starts the web server daemon.
-- When running on Mac/PC (Dev mode): mock GPIO activates automatically, allowing full frontend and backend testing without physical hardware!
+`auto-zoom` and `auto-zoom-web` are registered entry points. The web assets are included as package data, and Flask remains optional for CLI-only installs.
+
+The current GPIO proxy automatically falls back to mock GPIO when the real driver is unavailable, and `--dry-run` explicitly selects emulation. This supports local API/UI tests, but does not validate real GPIO behavior.
 
 ---
 
 ## 7. Dev Mode vs. Prod Mode: Auto-Hotspot Solution
 
-### 7.1 The Dilemma
+### 7.1 Current State and Goal
+- The repository does not configure Wi-Fi profiles, create a hotspot, install a network fallback service, or install an Auto Zoom systemd service.
+- The README describes manual installation of the third-party RaspberryConnect AutoHotspot installer; that is separate from this project and is not integrated with `install_pi.sh`.
+- Keep development mode and field access as deployment options, not assumptions about what every Pi OS image does by default.
+
+### 7.2 Deployment Modes
 - **Dev Mode (Home)**: Pi connects to home Wi-Fi (`Home-WiFi`). You connect from your Mac via `ssh pi@autozoom.local` or browse `http://autozoom.local:5000`.
 - **Prod Mode (Field)**: Pi is miles away from home. If it boots and waits for `Home-WiFi`, it hangs in client mode with no IP address. Your phone cannot connect, rendering the Pi inaccessible without a keyboard/screen.
 
-### 7.2 The Solution: Automated Hotspot Fallback (`autohotspot`)
-Modern Raspberry Pi OS uses **NetworkManager** (`nmcli`) or `wpa_supplicant` + `hostapd`/`dnsmasq`. We implement an automated service script:
+### 7.3 Proposed Hotspot Fallback
+Evaluate the Pi OS networking stack first. Do not assume connection-profile priority alone guarantees a timed fallback; verify the behavior on each supported OS and preserve existing user network configuration.
 
 ```mermaid
 sequenceDiagram
@@ -222,52 +213,54 @@ sequenceDiagram
     participant STA as Client Mode (Home WiFi)
     participant AP as Hotspot Mode (AutoZoom-Field)
 
-    Boot->>Scanner: Scan for known SSIDs (10s timeout)
+    Boot->>Scanner: Check configured client network
     alt Known Home WiFi is reachable
         Scanner->>STA: Connect to Home WiFi
         STA-->>Boot: Dev Mode Active (Local IP assigned)
     else No Known WiFi found
-        Scanner->>AP: Activate Hotspot 'AutoZoom-Field'
-        AP-->>Boot: Prod Mode Active (Static IP 192.168.4.1)
+        Scanner->>AP: Start configured fallback access point
+        AP-->>Boot: Field network active (address configured by deployment)
     end
 ```
 
-### 7.3 Implementation Options for Auto-Hotspot
-1. **NetworkManager Native AP Fallback (Pi OS Bookworm / Debian 12 - Recommended)**:
-   - Modern Pi OS Bookworm manages networking via NetworkManager.
-   - NetworkManager natively supports automatic fallback:
-     - Priority 1: Home Wi-Fi profile (autoconnect = true, priority = 100).
-     - Priority 2: Hotspot profile (autoconnect = true, priority = 50, mode = ap, ssid = `AutoZoom-Field`, ip = `192.168.4.1/24`).
-   - If Home Wi-Fi is not reachable within 15 seconds, NetworkManager immediately starts the AP hotspot!
+### 7.4 Implementation Options for Auto-Hotspot
+1. **NetworkManager fallback (where supported)**:
+   - Prefer supported NetworkManager configuration when the target image uses it.
+   - Implement a tested fallback trigger and explicit SSID, address, and DHCP configuration; profile priority by itself is not an acceptance test.
 2. **Dedicated Fallback Daemon (`scripts/autohotspot.sh` + systemd)**:
-   - For Bullseye / Legacy systems or custom setups:
-   - A lightweight bash script checks `nmcli -t -f SSID dev wifi list` or `iwlist wlan0 scan`.
-   - If home SSID not found, toggles interface to AP mode with `dnsmasq` supplying DHCP (`192.168.4.10` to `192.168.4.50`).
+   - Consider only for OS releases where the native setup is unavailable or insufficient.
+   - Make the network manager and DHCP/DNS implementation explicit; avoid competing with NetworkManager or `wpa_supplicant` for the same interface.
+   - Require an opt-in setup, rollback/uninstall instructions, and tests for recovery to client Wi-Fi.
 
-### 7.4 Phone Field Workflow
+### 7.5 Proposed Phone Field Workflow
 1. Turn on Raspberry Pi battery power pack in the field.
-2. Wait 30 seconds.
-3. Open iPhone/Android Wi-Fi settings. Connect to **AutoZoom-Field** (Password: `autozoom123` or open).
-4. Open Safari/Chrome and navigate to `http://192.168.4.1:5000` (or `http://autozoom.local:5000`).
+2. Wait for the configured access point to become available; timeout must be measured on supported hardware.
+3. Connect to the operator-configured SSID using a non-default password.
+4. Open Safari/Chrome and navigate to the address documented by the installed network configuration.
 5. Run jog diagnostics, set parameters, click **Start Timelapse**.
-6. Put phone back in pocket — timelapse continues uninterrupted!
+6. Confirm mission status, then disconnect or lock the phone; the server-side mission continues unless a documented system fault occurs.
 
 ---
 
 ## 8. Phased Implementation Roadmap
 
+**Prerequisites for live hardware/network control**: Complete the installer validation in Phase 8 of `modernization_plan.md` and the position/timing safety work in `product_improvement_plan.md`. The implemented web MVP is loopback-only and simulation-only.
+
 | Phase | Milestone | Deliverables |
 |---|---|---|
-| **Phase 1** | **Core Refactoring & Engine** | Extract `AutoZoomEngine` with background threading, state tracking, and mock GPIO support. Ensure CLI works identically. |
-| **Phase 2** | **Backend REST API** | Implement Flask app (`server.py`) with `/api/status`, `/api/diagnostics/jog`, `/api/start`, `/api/stop`. |
-| **Phase 3** | **Frontend UI & Styling** | Create mobile-first dark UI (`index.html`, `app.css`, `app.js`) with zero external CDNs. |
-| **Phase 4** | **Pre-flight & Safety Features** | Add manual jog controls, dry-run simulation mode, countdown timers, confirmation modals, and disconnect reconnection sync. |
-| **Phase 5** | **Auto-Hotspot & Systemd Services** | Create `autohotspot.sh` script, NetworkManager configurations, and `autozoom.service` systemd unit for automatic boot launch. |
-| **Phase 6** | **Documentation & Testing** | Comprehensive unit tests for engine & API, plus step-by-step field guide in `README.md`. |
+| **Phase 1** | **Shared Engine - MVP COMPLETE** | Shared absolute scheduler and status used by the synchronous CLI and one web worker; CLI behavior is regression-tested. |
+| **Phase 2** | **Safety and Diagnostics - PENDING** | Add position limits, verified stop semantics, and bounded jog before allowing live motor commands. |
+| **Phase 3** | **API and Server - MVP COMPLETE** | Optional Flask dependency; localhost-only status/start/stop API; starts force dry-run. Authentication and live controls remain pending before any LAN binding. |
+| **Phase 4** | **Mobile Web UI - MVP COMPLETE** | Responsive local form, mission preview, one-second status polling, progress, and stop control. Pause/resume and field-network access remain pending. |
+| **Phase 5** | **Pi Service and Networking - PENDING** | Add a tested systemd service and opt-in hotspot setup for supported OS releases, with secure credentials and rollback instructions. |
+| **Phase 6** | **Integration and Field Validation - MVP TESTS PASS; PI PENDING** | Engine/API tests and CLI regression tests pass locally; complete network/service tests and end-to-end Pi acceptance later. |
 
 ---
 
 ## 9. Verification & Acceptance Criteria
-1. **Desktop Simulation**: Running `python -m auto_zoom_controller.web.server` on macOS/Linux runs in mock mode, serving the UI on `http://localhost:5000` where jog, dry-run, start, pause, and stop can be tested completely without hardware.
-2. **CLI Unbroken**: Running `auto-zoom` CLI commands still functions identically without web server dependencies.
-3. **Field Network Switching**: Booting without home Wi-Fi starts the AP hotspot within 30 seconds; connecting from a phone loads the web application immediately.
+1. **Desktop Simulation - MVP PASS**: Flask test-client coverage verifies the UI assets, status/start/stop APIs, validation, and forced dry-run; a local smoke run verifies the `auto-zoom-web` entry point.
+2. **CLI Compatibility - MVP PASS**: Existing CLI tests and dry-run continue to pass through the shared engine without requiring Flask at runtime.
+3. **Safety and Authorization - LIVE CONTROL PENDING**: The MVP rejects invalid inputs, binds only to loopback, and always uses mock GPIO. Add position limits and authentication before exposing live motor controls to a network.
+4. **Disconnect Recovery - MVP PASS**: Mission execution belongs to the server worker, not the browser; reopening the page reads current state from `/api/status`. Process restart recovery is not provided.
+5. **Field Network Switching - PENDING**: On every claimed supported Pi OS release, verify client Wi-Fi and fallback AP behavior and the documented address on hardware.
+6. **Service Lifecycle - PENDING**: Verify systemd start/stop/restart, GPIO cleanup, and network rollback after those services are implemented.
