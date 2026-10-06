@@ -23,6 +23,7 @@ Automated lens zoom controller for timelapse photography using a Raspberry Pi, a
   - [Calibrating Lens Zoom Throw](#calibrating-lens-zoom-throw)
   - [Running the Script](#running-the-script)
   - [Quick Motor Test](#quick-motor-test)
+- [Version Tags](#version-tags)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -224,6 +225,23 @@ zoom.job()
 GPIO.cleanup()
 "
 ```
+
+## Version Tags
+
+After merging the release changes to `main` and confirming CI is green, use `scripts/bump_version.sh` to increment the latest stable Git tag. `patch` increments the last number, `minor` increments the middle number and resets patch to zero, and `major` increments the first number and resets the other two. The working tree must be clean when creating a tag.
+
+```bash
+# Preview the next patch version without creating a tag
+bash scripts/bump_version.sh patch --dry-run
+
+# Create a local minor version tag
+bash scripts/bump_version.sh minor
+
+# Create and push a major version tag to start the release workflow
+bash scripts/bump_version.sh major --push
+```
+
+The script creates an annotated tag locally by default. Use `--push` to push it to `origin`; otherwise, it prints the `git push` command to run when ready. Run `bash scripts/bump_version.sh --help` for usage.
 
 ---
 

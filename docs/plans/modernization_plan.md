@@ -1,6 +1,6 @@
 # Modernization Plan: Auto Zoom Controller
 
-**Status**: In Progress (Phase 1 Complete)
+**Status**: In Progress (Phases 1–5 Complete)
 **Date**: 2026-10-06
 **Document**: `docs/plans/modernization_plan.md`
 
@@ -45,7 +45,7 @@ graph TD
     P1[Phase 1: Modern Packaging - Done] --> P2[Phase 2: Hardware Abstraction & CLI - Done]
     P2 --> P3[Phase 3: Testing Infrastructure - Done]
     P3 --> P4[Phase 4: Tooling & Pre-commit - Done]
-    P4 --> P5[Phase 5: GitHub Actions CI/CD]
+    P4 --> P5[Phase 5: GitHub Actions CI/CD - Done]
     P5 --> P6[Phase 6: Raspberry Pi Installer]
     P6 --> P7[Phase 7: Documentation & Verification]
 ```
@@ -124,7 +124,7 @@ graph TD
   - [x] Provided commands: `make venv`, `make install`, `make dev`, `make test`, `make lint`, `make format`, `make check`, `make run-dry`, `make clean`.
 
 
-### Phase 5: GitHub Actions CI/CD Pipeline
+### Phase 5: GitHub Actions CI/CD Pipeline - [COMPLETED]
 - **Continuous Integration (`.github/workflows/ci.yml`)**:
   - Runs on `push` and `pull_request` to `main`.
   - Matrix across Python `3.9`, `3.10`, `3.11`, `3.12`, `3.13`.
@@ -135,10 +135,12 @@ graph TD
     4. Lint with `ruff check .`.
     5. Format check with `ruff format --check .`.
     6. Run tests with `pytest --cov=auto_zoom_controller --cov-report=xml`.
+  - Verification: all CI checks passed on pull request #1 across the Python matrix.
 - **Release Automation (`.github/workflows/release.yml`)**:
   - Runs on tag push matching `v*`.
   - Builds sdist and wheel with `python -m build`.
   - Publishes artifacts to GitHub Releases.
+  - Verification: release `v0.0.1` is live on [GitHub Releases](https://github.com/szigyi/auto-zoom-controller/releases).
 
 ### Phase 6: Automated Raspberry Pi Deployment Script
 - **Installer Script (`scripts/install_pi.sh`)**:
