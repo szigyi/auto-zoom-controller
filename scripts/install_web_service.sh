@@ -25,7 +25,6 @@ unit_template="$project_dir/scripts/systemd/autozoom-web.service"
 web_command="$project_dir/.venv/bin/auto-zoom-web"
 
 [[ -f "$unit_template" ]] || { printf 'Missing service template: %s\n' "$unit_template" >&2; exit 1; }
-[[ -x "$web_command" ]] || { printf 'Missing %s; install the [web] extra first.\n' "$web_command" >&2; exit 1; }
 [[ "$project_dir" != *[[:space:]]* ]] || {
     printf '%s\n' "Project path contains whitespace, which this unit template does not support." >&2
     exit 1
@@ -40,6 +39,10 @@ render_unit() {
 if [[ "$dry_run" == true ]]; then
     render_unit
     exit 0
+fi
+
+if [[ "$uninstall" != true ]]; then
+    [[ -x "$web_command" ]] || { printf 'Missing %s; install the [web] extra first.\n' "$web_command" >&2; exit 1; }
 fi
 
 [[ "$(uname -s)" == "Linux" ]] || {
